@@ -11,6 +11,22 @@ variables:
    define('observe_speed', 1000, true); //ms
 }
 
+preferances:
+{
+   if (isset($_REQUEST['preferance']))
+   {
+      if (isset($_REQUEST['sorting']))
+      {
+         setcookie("pref_sorting", $_REQUEST['sorting'], time()+2592000);
+      }
+
+      exit;
+   }
+
+   $pref = array();
+   $pref['sorting'] = empty($_COOKIE['pref_sorting'])? "1234" : $_COOKIE['pref_sorting'];
+}
+
 
 login_check:
 {
@@ -595,6 +611,59 @@ a {
    margin: -10em auto 10em;
 }
 
+.player.hand .footer {
+   margin-top: -0.5em;
+   transition: margin-top, 1s;
+   padding-top: 0.5em;
+}
+.player.hand .footer:hover {
+   margin-top: -1.5em;
+}
+.player.hand .footer .suits {
+   display: inline-block;
+   padding: 0.25em 1.5em 0em;
+   background-color: #B8D7F2;
+   border-top-left-radius: 1em;
+   border-top-right-radius: 1em;
+   box-shadow: 0em 0em 0.25em 0.25em #B8D7F2;
+}
+.player.hand .footer .suit {
+   display: inline-block;
+   background-color: #6496C8;
+   padding: 0em 0.25em;
+   margin: 0em 0.5em;
+}
+.player.hand .footer .suit:before {
+   content: '';
+   display: inline-block;
+   float: left;
+   border-top: 0.5em solid #6496C8;
+   border-bottom: 0.5em solid #6496C8;
+   border-left: 1em solid transparent;
+   margin: 0em 1.25em -1em -1.25em;
+}
+.player.hand .footer .suit:after {
+   content: '';
+   display: inline-block;
+   float: right;
+   border-top: 0.5em solid transparent;
+   border-bottom: 0.5em solid transparent;
+   border-left: 1em solid #6496C8;
+   margin: -1em -1.25em 0em 1.25em;
+}
+.player.hand .footer .suit .name {
+   display: none;
+}
+.player.hand .footer .suit .icon {
+   display: block;
+   width: 1em;
+   height: 1em;
+}
+.player.hand .footer .suit .icon img {
+   width: 1em;
+   height: 1em;
+}
+
 .opponents {
    position: absolute;
    top: 0em;
@@ -782,6 +851,21 @@ js:
 
       if (isset($_REQUEST['movables']))
       {
+         $mt = $_REQUEST['movables'];
+         if ($mt != "pregame" && $mt != "ingame")
+            exit;
+
+         if ($mt == "pregame")
+         {
+            $axis = "Y";
+            $mt = 1;
+         }
+         if ($mt == "ingame")
+         {
+            $axis = "X";
+            $mt = 2;
+         }
+
          echo <<<EOT
 var ms = document.getElementsByName("movable");
 movables = new Array();
@@ -799,127 +883,166 @@ function findPos(obj) {
    }
    return false;
 }
-
-var i;
-for (i=0; i < ms.length; i++)
-{
-   ms[i].onmousedown = dragStart;
-   document.onmouseup   = dragEnd;
-   ms[i].parentNode.onmousemove = dragMove;
-   ms[i].parentNode.shouldMove = false;
-   ms[i].parentNode.change = 0;
-   movables[i] = findPos(ms[i])[1];
-}
-
-currently_dragged = null;
-
-function dragStart (event) {
-   if (event.preventDefault)
-      event.preventDefault();
-
-   currently_dragged = this.parentNode;
-
-   currently_dragged.shouldMove = true;
-   currently_dragged.clickedY = event.clientY;
-
-   if (typeof currently_dragged.index == "undefined")
-   {
-      var i = 0;
-      while (typeof movables[i] != "undefined")
-         if (currently_dragged.clickedY >= movables[i])
-            i++;
-         else
-            break;
-
-      currently_dragged.index = i>0 ? i-1 : 0;
-   }
-
-   currently_dragged.style.position = "relative";
-   currently_dragged.style.zIndex = "1";
-   currently_dragged.style.left = "0.5em";
-   currently_dragged.style.boxShadow = "-0.25em 0.25em 0.25em 0px gray";
-}
-function dragEnd (suppressed) {
-   if (!currently_dragged) return true;
-   if (typeof suppressed != 'boolean')
-      suppressed = false;
-
-   currently_dragged.shouldMove = false;
-   currently_dragged.clickedY = null;
-
-   currently_dragged.style.position = "relative";
-   currently_dragged.style.zIndex = "0";
-   currently_dragged.style.top = "0em";
-   currently_dragged.style.left = "0em";
-   currently_dragged.style.boxShadow = "0em 0em 0em 0px gray";
-
-   if (!suppressed && currently_dragged.change != 0)
-   {
-      //make update call
-      window.location.href='?update&pid='+(currently_dragged.index - currently_dragged.change)+'&chg='+(currently_dragged.change);
-   }
-   currently_dragged.change = 0;
-
-   currently_dragged = null;
-   return true;
-}
-
-function dragMove (event) {
-   if (!currently_dragged)
-      return true;
-   if (!currently_dragged.shouldMove)
-      return false;
-
-   var i = 0;
-   while (typeof movables[i] != "undefined")
-      if (event.clientY >= movables[i])
-         i++;
-      else
-         break;
-   if (i>0) i--;
-
-   var ind = currently_dragged.index;
-   var chg;// = currently_dragged.change;
-
-   if (i != ind)
-   {
-      var correction = currently_dragged.clickedY - movables[currently_dragged.index];
 EOT;
-      echo '      if (i < ind) correction -= '.(2*em).'; //2em';
-      echo <<<EOT
 
-      currently_dragged.change -= ind-i;
-      chg = currently_dragged.change;
-      currently_dragged.change = 0;
-
-      //dragEnd(1)
-      dragEnd(true);
-
-      //change nameplates
-      var ms = document.getElementsByName("movable");
-
-      var l;
-      for (l=0; l < ms[i].parentNode.childNodes.length; l++)
-      {
-         var elem = ms[i].parentNode.childNodes[l];
-         if (elem.className && elem.className.indexOf("player-name") == -1)
-            continue;
-
-         var tmp = elem.innerHTML;
-         elem.innerHTML = ms[ind].parentNode.childNodes[l].innerHTML;
-         ms[ind].parentNode.childNodes[l].innerHTML = tmp;
-      }
-
-
-      //dragStart.call(elem, {clientY:}
-      dragStart.call(ms[i], {clientY: event.clientY-(-correction)});
-
-      currently_dragged.change = chg;
-   }
-
-   currently_dragged.style.top = (event.clientY - currently_dragged.clickedY)+"px";
-}
-EOT;
+         echo 'var i;'."\n";
+         echo 'for (i=0; i < ms.length; i++)'."\n";
+         echo '{'."\n";
+         echo '   ms[i].onmousedown = dragStart;'."\n";
+         echo '   document.onmouseup   = dragEnd;'."\n";
+         echo '   ms[i].parentNode.onmousemove = dragMove;'."\n";
+         echo '   ms[i].parentNode.shouldMove = false;'."\n";
+         if ($mt==1) echo '   ms[i].parentNode.change = 0;'."\n";
+         echo '   movables[i] = findPos(ms[i])['.($axis=="X"? "0" : "1").'];'."\n";
+         echo '}'."\n";
+         echo "\n";
+         echo 'currently_dragged = null;'."\n";
+         echo "\n";
+         echo 'function dragStart (event) {'."\n";
+         echo '   if (event.preventDefault)'."\n";
+         echo '      event.preventDefault();'."\n";
+         echo "\n";
+         echo '   currently_dragged = this'.($mt==1? '.parentNode' : '').';'."\n";
+         echo "\n";
+         echo '   currently_dragged.shouldMove = true;'."\n";
+         echo '   currently_dragged.clicked'.$axis.' = event.client'.$axis.';'."\n";
+         echo "\n";
+         echo '   if (typeof currently_dragged.index == "undefined")'."\n";
+         echo '   {'."\n";
+         echo '      var i = 0;'."\n";
+         echo '      while (typeof movables[i] != "undefined")'."\n";
+         echo '         if (currently_dragged.clicked'.$axis.' >= movables[i])'."\n";
+         echo '            i++;'."\n";
+         echo '         else'."\n";
+         echo '            break;'."\n";
+         echo "\n";
+         echo '      currently_dragged.index = i>0 ? i-1 : 0;'."\n";
+         echo '   }'."\n";
+         echo "\n";
+         echo '   currently_dragged.style.position = "relative";'."\n";
+         echo '   currently_dragged.style.zIndex = "1";'."\n";
+         if ($mt==1) echo '   currently_dragged.style.left = "0.5em";'."\n";
+         echo '   currently_dragged.style.boxShadow = "-0.25em 0.25em 0.25em 0px gray";'."\n";
+         echo '}'."\n";
+         echo "\n";
+         echo 'function dragEnd (suppressed) {'."\n";
+         echo '   if (!currently_dragged) return true;'."\n";
+         echo '   if (typeof suppressed != "boolean")'."\n";
+         echo '      suppressed = false;'."\n";
+         echo "\n";
+         echo '   currently_dragged.shouldMove = false;'."\n";
+         echo '   currently_dragged.clicked'.$axis.' = null;'."\n";
+         echo "\n";
+         echo '   currently_dragged.style.position = "relative";'."\n";
+         echo '   currently_dragged.style.zIndex = "0";'."\n";
+         echo '   currently_dragged.style.top = "0em";'."\n";
+         echo '   currently_dragged.style.left = "0em";'."\n";
+         echo '   currently_dragged.style.boxShadow = "0em 0em 0em 0px gray";'."\n";
+         echo "\n";
+         echo '   if (!suppressed && currently_dragged.change != 0)'."\n";
+         echo '   {'."\n";
+         echo '      //make update call'."\n";
+         if ($mt==1)
+         {
+            echo '      window.location.href="?update&pid="+(currently_dragged.index - currently_dragged.change)+"&chg="+(currently_dragged.change);'."\n";
+         }
+         if ($mt==2)
+         {
+            echo '      var ms = document.getElementsByName("movable");'."\n";
+            echo '      var sortprefstr = "";'."\n";
+            echo ''."\n";
+            echo '      var i;'."\n";
+            echo '      for (i=0; i<ms.length; i++)'."\n";
+            echo '      {'."\n";
+            echo '         var j;'."\n";
+            echo '         for (j=0; j<ms[i].childNodes.length; j++)'."\n";
+            echo '         {'."\n";
+            echo '            var elem = ms[i].childNodes[j];'."\n";
+            echo '            if (!elem.className || elem.className != "name")'."\n";
+            echo '               continue;'."\n";
+            echo ''."\n";
+            echo '            var suitName = elem.innerHTML.toLowerCase();'."\n";
+            echo '            if (suitName.indexOf("club") != -1)'."\n";
+            echo '               sortprefstr += "1";'."\n";
+            echo '            if (suitName.indexOf("diamond") != -1)'."\n";
+            echo '               sortprefstr += "2";'."\n";
+            echo '            if (suitName.indexOf("heart") != -1)'."\n";
+            echo '               sortprefstr += "3";'."\n";
+            echo '            if (suitName.indexOf("spade") != -1)'."\n";
+            echo '               sortprefstr += "4";'."\n";
+            echo '         }'."\n";
+            echo '      }'."\n";
+            echo ''."\n";
+            echo '      call("?preferance&sorting="+sortprefstr, function(t){window.location.reload();});'."\n";
+         }
+         echo '   }'."\n";
+         echo '   currently_dragged.change = 0;'."\n";
+         echo "\n";
+         echo '   currently_dragged = null;'."\n";
+         echo '   return true;'."\n";
+         echo '}'."\n";
+         echo ''."\n";
+         echo 'function dragMove (event) {'."\n";
+         echo '   if (!currently_dragged)'."\n";
+         echo '      return true;'."\n";
+         echo '   if (!currently_dragged.shouldMove)'."\n";
+         echo '      return false;'."\n";
+         echo ''."\n";
+         echo '   var i = 0;'."\n";
+         echo '   while (typeof movables[i] != "undefined")'."\n";
+         echo '      if (event.client'.$axis.' >= movables[i])'."\n";
+         echo '         i++;'."\n";
+         echo '      else'."\n";
+         echo '         break;'."\n";
+         echo '   if (i>0) i--;'."\n";
+         echo ''."\n";
+         echo '   var ind = currently_dragged.index;'."\n";
+         echo '   var chg;// = currently_dragged.change;'."\n";
+         echo ''."\n";
+         echo '   if (i != ind)'."\n";
+         echo '   {'."\n";
+         echo '      var correction = currently_dragged.clicked'.$axis.' - movables[currently_dragged.index];'."\n";
+         echo '      if (i < ind) correction -= '.($mt==1? "2" : "2.5").'*'.em.'; //2em'."\n";
+         echo "\n";
+         echo '      currently_dragged.change -= ind-i;'."\n";
+         echo '      chg = currently_dragged.change;'."\n";
+         echo '      currently_dragged.change = 0;'."\n";
+         echo "\n";
+         echo '      //dragEnd(1)'."\n";
+         echo '      dragEnd(true);'."\n";
+         echo "\n";
+         echo '      //change nameplates'."\n";
+         echo '      var ms = document.getElementsByName("movable");'."\n";
+         echo "\n";
+         if ($mt==1)
+         {
+            echo '      var l;'."\n";
+            echo '      for (l=0; l < ms[i].parentNode.childNodes.length; l++)'."\n";
+            echo '      {'."\n";
+            echo '         var elem = ms[i].parentNode.childNodes[l];'."\n";
+            echo '         if (!elem.className || elem.className.indexOf("player-name") == -1)'."\n";
+            echo '            continue;'."\n";
+            echo "\n";
+            echo '         var tmp = elem.innerHTML;'."\n";
+            echo '         elem.innerHTML = ms[ind].parentNode.childNodes[l].innerHTML;'."\n";
+            echo '         ms[ind].parentNode.childNodes[l].innerHTML = tmp;'."\n";
+            echo '      }'."\n";
+         }
+         if ($mt==2)
+         {
+            echo '      var tmp = ms[i].innerHTML;'."\n";
+            echo '      ms[i].innerHTML = ms[ind].innerHTML;'."\n";
+            echo '      ms[ind].innerHTML = tmp;'."\n";
+         }
+         echo "\n";
+         echo "\n";
+         echo '      dragStart.call(ms[i], {client'.$axis.': event.client'.$axis.'-(-correction)});'."\n";
+         echo "\n";
+         echo '      currently_dragged.change = chg;'."\n";
+         echo '   }'."\n";
+         echo "\n";
+         echo '   currently_dragged.style.'.($axis=="X"? "left" : "top").' = (event.client'.$axis.' - currently_dragged.clicked'.$axis.')+"px";'."\n";
+         echo '}'."\n";
       }
 
       if (isset($_REQUEST['loadingOverhaul']))
@@ -2413,6 +2536,7 @@ ingame:
       }
       echo "\n";
       echo '   </div>'."\n";
+      echo "\n";
       echo '</div>'."\n";
 
 
@@ -2464,22 +2588,83 @@ ingame:
       echo "\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($g['players'][$my_pid]['cards'] as $card)
+
+      $inhand = $g['players'][$my_pid]['cards'];
+
+      function sortHand($a, $b)
+      {
+         $suit_a = substr($a['name'], -1);
+         $suit_b = substr($b['name'], -1);
+
+         if ($suit_a == $suit_b)
+            return $a['power'] - $b['power'];
+
+         $sl = array("c", "d", "h", "s");
+         $sn = array("1", "2", "3", "4");
+
+         $sa = str_replace($sl, $sn, $suit_a);
+         $sb = str_replace($sl, $sn, $suit_b);
+
+         $oa = strpos($GLOBALS['pref']['sorting'], $sa);
+         $ob = strpos($GLOBALS['pref']['sorting'], $sb);
+
+         return $oa - $ob;
+      }
+      usort($inhand, "sortHand");
+
+      foreach ($inhand as $card)
       {
          echo '      <div class="card" onclick="play(\''.$card['name'].'\');">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
          echo '         <div class="name">'.$card['fullname'].'</div>'."\n";
          echo '      </div>'."\n";
       }
+
       echo "\n";
       echo '   </div>'."\n";
-      echo "\n";
       if ($can_draw)
       {
+         echo "\n";
          echo '   <div>'."\n";
          echo '      <a class="action" href="?draw">Draw</a>'."\n";
          echo '   </div>'."\n";
       }
+      echo "\n";
+      echo '   <div class="footer">'."\n";
+      echo '      <div class="suits">'."\n";
+      for ($i=0; $i < 4; $i++)
+      {
+         $suit = substr($pref['sorting'], $i, 1);
+
+         if ($suit==1)
+         {
+            $suitName = 'Clubs';
+            $suitIcon = 'img/clubs.png';
+         }
+         if ($suit==2)
+         {
+            $suitName = 'Diamonds';
+            $suitIcon = 'img/diamonds.png';
+         }
+         if ($suit==3)
+         {
+            $suitName = 'Hearts';
+            $suitIcon = 'img/hearts.png';
+         }
+         if ($suit==4)
+         {
+            $suitName = 'Spades';
+            $suitIcon = 'img/spades.png';
+         }
+
+         echo '         <div class="suit" name="movable">'."\n";
+         echo '            <span class="name">'.$suitName.'</span>'."\n";
+         echo '            <span class="icon"> <img src="'.$suitIcon.'" /> </span>'."\n";
+         echo '         </div>'."\n";
+      }
+      echo '      </div>'."\n";
+      echo '   </div>'."\n";
+      echo "\n";
       echo '</div>'."\n";
 
 
@@ -2533,6 +2718,8 @@ ingame:
       echo '</script>'."\n";
       echo "\n";
 
+      // sorting pref movables
+      echo '<script type="text/javascript" src="?js&movables=ingame"></script>'."\n";
 
       // animation
       echo '<script type="text/javascript" src="?js&loadingOverhaul"></script>'."\n";
@@ -2752,7 +2939,7 @@ pregame:
 
       if ($_SESSION['user'] == $g['host'])
       {
-         echo '      <script type="text/javascript" src="?js&movables"></script>'."\n";
+         echo '      <script type="text/javascript" src="?js&movables=pregame"></script>'."\n";
          echo "\n";
       }
 
