@@ -1,0 +1,69 @@
+### Risk Jack ###
+#This is a version file
+#  used for dynamically updating links so that people know there's something new
+#  it also contains the changelogs for a given project
+
+
+version 0.1
+    - Basic (auto)login system
+         + has a "remember me" feature
+         + has a "keep me logged in" feature
+         + Simplistic lightblue center-screened design
+
+version 0.2
+    - Added a simple Lobby
+         + has client-side filters for both played games and available games
+         @ missing icon set for rules
+         @ filter is basic and only goes through game names
+         @ missing filter features: "show available (to me) games"; filter by playerCount, other rules
+
+version 0.3
+   - Added a pre-game lobby
+         + keeps the lightblue simple design
+         + shows rules and players
+         + allows the host to intuitively rearrange the players
+         + hosts have the option to promote other players (to hosts)
+         + hosts  have the option to kick other players
+         + 3 default presets of rules available for choosing by the host
+         @ rules can only be changed through the presets
+
+version 0.4
+   - Implemented a dynamic update system
+         + uses longpolling and status flags in a mysql database table
+         + applied to lobby for updating the game lists
+         + applied to pre-game lobby for updating the rules and players
+         + applied to [alpha] in-game screen for portraying moves
+         @ in the lobby screen, might force a refresh and thus reset the filters
+
+version 0.5
+   - Added a in-game screen
+         + displays everything you need to play the game
+         + clean design with green background
+         + players can choose their preferred way of sorting the cards in their hand
+         @ each move refreshes the page via the update system
+         @ lack of animations for smoother experience
+   - Implemented a basic client-side play engine
+         + if &$game is available, loads only the missing turns (not all turns every load)
+
+version 0.6
+   - Added basic "observer" mode
+         + reenacts the moves through the point of view of a specific player (default: player1)
+         + auto-plays next moves with a different time pause for different type of moves
+         @ the observer is limited to the view of only one player
+         @ no speed control over the auto-play
+         @ shares all the problems of the in-game screen
+
+version 0.7
+   - Added a game-over screen
+
+version 0.8
+   - Improved the play engine
+
+version 0.8.4
+   - Lots of small fixes
+
+version 0.9
+   - Added Player Stats
+
+version 1.0
+   - Fixed all the issues of the previous versions
