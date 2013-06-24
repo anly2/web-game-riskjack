@@ -9,6 +9,37 @@ variables:
    define('em', 16, true); //px
    define('cardsPerDeal', 3, true);
    define('observe_speed', 1000, true); //ms
+
+
+   function redirect ($uri)
+   {
+      //$url = http_build_url("http://".$_SERVER['HTTP_HOST'].$_SERVER['PHP_SELF'], $uri);
+
+      $au = parse_url($uri);
+
+      if (!isset($au['scheme'])) $au['scheme'] = "http";
+      if (!isset($au['host'])) $au['host'] = $_SERVER['HTTP_HOST'];
+      if (!isset($au['path'])) $au['path'] = $_SERVER['PHP_SELF'];
+
+      $url  = $au['scheme'];
+      $url .= "://";
+      $url .= $au['host'];
+
+      if (isset($au['port']))
+         $url .= ":".$au['port'];
+
+      $url .= $au['path'];
+
+      if (isset($au['query']))
+         $url .= "?".$au['query'];
+
+      if (isset($au['fragment']))
+         $url .= "#".$au['fragment'];
+
+      //echo $url;
+      header("Location: $url");
+      exit; //just in case execution of code continues after the redirection
+   }
 }
 
 preferances:
@@ -237,6 +268,23 @@ EOT;
    content: "Rules:";
    font-style: italic;
    margin-right: 1em;
+}
+.lobby .games .game > .options {
+   floet: right;
+}
+.lobby .games .game > .options > .option.rename {
+   display: inline-block;
+   overflow: hidden;
+   width: 0;
+   height: 0;
+   border: 0.5em solid #6496C8;
+   border-top-left-radius: 0.5em;
+   border-top-right-radius: 0.5em;
+   border-bottom-right-radius: 0.5em;
+   margin: 0.1em 0em -0.1em 1em; /* why do I need to compensate like this... */
+}
+.lobby .games .game > .options > .option.rename:hover {
+   border-color: #36516C;
 }
 EOT;
       }
@@ -765,6 +813,87 @@ a {
    background-color: rgba(100, 150, 200, 1);
    box-shadow: 0em 0em 0.5em 0.5em rgba(100, 150, 200, 1);
 }
+
+.controls {
+   display: inline-block;
+   position: fixed;
+   left: 2em;
+   top: 12em;
+   cursor: move;
+}
+.controls {
+   background-color: rgba(185, 215, 245, 0.3);
+   padding: 0.75em;
+   border-radius: 1em;
+   text-align: center;
+}
+.controls .control {
+   display: inline-block;
+   margin: 0.5em;
+   font-weight: bold;
+   cursor: pointer;
+}
+.controls .control:hover {
+   text-decoration: underline;
+}
+.controls .control.back-once {
+   display: block;
+   margin: 0.5em auto;
+   width: 5.5em;
+}
+.controls .control.exit {
+   display: block;
+   margin: 0.5em auto;
+   width: 2.5em;
+}
+.controls .control.pause-play {
+   width: 3em;
+}
+EOT;
+      }
+
+      if (isset($_REQUEST['rename']))
+      {
+         echo <<<EOT
+.game.info {
+   display: block;
+   margin: 20% auto;
+   width: 15em;
+}
+.game.info {
+   text-align: center;
+}
+.game.info {
+   background-color: rgba(100, 150, 200, 1);
+   border-radius: 1em;
+   padding: 1em;
+}
+
+.game.info .header {
+   font-style: italic;
+   padding: 0.5em;
+   border-bottom: 1px solid #36516C;
+   margin: -0.5em auto 1.5em;
+}
+
+.game.info .name {
+   margin: 0.25em;
+   font-size: 1.1em;
+   font-weight: bold;
+   font-style: italic;
+}
+
+.game.info input {
+   margin: 0.25em;
+   padding: 0.5em;
+   border-radius: 1em;
+   text-align: center;
+}
+.game.info input[type="submit"] {
+   width: 8em;
+   background-color: #4D7399;
+   margin-bottom: -1.5em;
+}
 EOT;
       }
 
@@ -810,10 +939,7 @@ js:
       if (isset($_REQUEST['poll']) || count($_REQUEST)==1)
       {
          if (count($_REQUEST) > 1 && !isset($_REQUEST['call']))
-         {
-            header("Location: http://".$_SERVER['HTTP_HOST'].$_SERVER['PHP_SELF']."?js&call&poll");
-            exit;
-         }
+            redirect("?js&call&poll");
 
          echo 'lastpollcall  = false;'."\n";
          echo 'lastpollstate = false;'."\n";
@@ -1150,13 +1276,11 @@ login_queries:
             setcookie('stayin', session_id(), time() + 2592000); //expire after 30 days
 
          //Success
-         echo '<script type="text/javascript">window.location.href="?silent&clean='.$p.'";</script>'."\n";
-         exit;
+         redirect("?silent&clean=$p");
       }
 
       //Failure
-      echo '<script type="text/javascript">window.location.href="?login&fail";</script>'."\n";
-      exit;
+      redirect("?login&fail");
    }
    if (isset($_REQUEST['login'], $_REQUEST['s3']))
    {
@@ -1170,20 +1294,17 @@ login_queries:
          $_SESSION['user'] = $usr;
 
          //Success
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
+         redirect("?");
       }
 
       //Failure
-      echo '<script type="text/javascript">window.location.href="?login&fail";</script>'."\n";
-      exit;
+      redirect("?login&fail");
    }
    if (isset($_REQUEST['logout']))
    {
       $usr = $_SESSION['user'];
       unset($_SESSION['user']);
-      header("Location: http://".$_SERVER['HTTP_HOST'].$_SERVER['PHP_SELF']."?clean=$usr");
-      exit;
+      redirect("?clean=$usr");
    }
    if (isset($_REQUEST['clean']))
    {
@@ -1214,7 +1335,7 @@ login_queries:
                echo '<a href="?">Home</a>'."\n";
             }
             else
-               echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+               redirect("?");
 
             exit;
          }
@@ -1229,8 +1350,7 @@ login_queries:
          mysql_("DELETE FROM rsk_status WHERE `Key`='game:$gid'");
       }
 
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
+      redirect("?");
    }
 }
 
@@ -1238,10 +1358,7 @@ login_queries:
 restriction:
 {
    if (!isset($_SESSION['user']) && count($_REQUEST) > 0)
-   {
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
-   }
+      redirect("?");
 }
 
 
@@ -1316,8 +1433,7 @@ queries:
       mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1, ".status_margin.") WHERE `Key`='lobby'");
       mysql_("INSERT INTO rsk_status (`Key`, `Value`) VALUES ('game:$gid', 0)");
 
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
+      redirect("?");
    }
    if (isset($_REQUEST['join']))
    {
@@ -1336,17 +1452,13 @@ queries:
          mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:$gid'");
       }
 
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
+      redirect("?");
    }
    if (isset($_REQUEST['update']))
    {
       $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
       if ($_SESSION['user'] != $g['host'])
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       $setstring = "";
       if (isset($_REQUEST['playerCount']))  $setstring .= ", PlayerCount=". intval($_REQUEST['playerCount']);
@@ -1370,10 +1482,7 @@ queries:
          $chg = intval($_REQUEST['chg']);
 
          if ($chg == 0)
-         {
-            echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-            exit;
-         }
+            redirect("?");
 
          mysql_("UPDATE rsk_players SET PID=0 WHERE GameID=".$g['gid']." AND PID = ".$pid) or die(mysql_error());
 
@@ -1386,71 +1495,50 @@ queries:
          mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
       }
 
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
+      redirect("?");
    }
    if (isset($_REQUEST['kick']))
    {
       $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
 
       if ($_SESSION['user'] != $g['host'])
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       $kickee = mysql_real_escape_string($_REQUEST['kick']);
 
       if ($kickee == $g['host'])
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       $kicked_pid = mysql_("SELECT PID FROM rsk_players WHERE GameID=".$g['gid']." AND Player='".$kickee."' AND Finished=0 LIMIT 1");
 
       if ($kicked_pid === false)
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       mysql_("DELETE FROM rsk_players WHERE GameID=".$g['gid']." AND Player='".$kickee."' AND Finished=0");
       mysql_("UPDATE rsk_players SET PID=PID-1 WHERE GameID=".$g['gid']." AND PID>".$kicked_pid);
 
       mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
+      redirect("?");
    }
    if (isset($_REQUEST['promote'])){
       $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
 
       if ($_SESSION['user'] != $g['host'])
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       $promotee = mysql_real_escape_string($_REQUEST['promote']);
 
       if (mysql_("SELECT 1 FROM rsk_players WHERE GameID=".$g['gid']." AND Player='".$promotee."' AND Finished=0", true) <= 0)
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       if ($promotee == $g['host'])
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       mysql_("UPDATE rsk_games SET Host='$promotee' WHERE GID=".$g['gid']);
       mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
-      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-      exit;
+      redirect("?");
    }
    if (isset($_REQUEST['leavegame']))
    {
@@ -1470,18 +1558,14 @@ queries:
          mysql_("DELETE FROM rsk_status WHERE `Key`='game:".$g['gid']."'");
       }
 
-      echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
-      exit;
+      redirect("?");
    }
    if (isset($_REQUEST['startgame']))
    {
       $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host, g.PlayerCount as playerCount, g.startingHand as startingHand FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
 
       if ($_SESSION['user'] != $g['host'])
-      {
-         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
-         exit;
-      }
+         redirect("?");
 
       $playersIn = mysql_("SELECT 1 FROM rsk_players WHERE GameID=".$g['gid']." AND Finished=0", true);
       if ($g['playerCount'] != $playersIn)
@@ -1543,8 +1627,7 @@ queries:
 
       // Deal Starting Hand
       $_SESSION['deal'] = $g['startingHand'];
-      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&back=?deal"</script>'."\n";
-      exit;
+      redirect("?parse=".$g['gid']."&back=?deal");
    }
 
    if (isset($_REQUEST['play']))
@@ -1562,10 +1645,7 @@ queries:
 
       // check if its player's turn
       if ($g['players'][$g['onturn']]['name'] != $_SESSION['user'])
-      {
-         echo '<script type="text/javascript">window.location.href="?error=1"</script>'."\n";
-         exit;
-      }
+         redirect("?error=1");
 
 
       // check if the player actually has this card
@@ -1577,10 +1657,7 @@ queries:
          }
 
       if (!isset($hasCard))
-      {
-         echo '<script type="text/javascript">window.location.href="?error=2"</script>'."\n";
-         exit;
-      }
+         redirect("?error=2");
 
 
       // check if is allowed to play the card
@@ -1598,10 +1675,7 @@ queries:
             // check if there is a card of that die in the player's hand
             foreach ($g['players'][$g['onturn']]['cards'] as $c)
                if ($c['name'] != $card && substr($c['name'], -1) == $dcd)
-               {
-                  echo '<script type="text/javascript">window.location.href="?error=3"</script>'."\n";
-                  exit;
-               }
+                  redirect("?error=3");
          }
          else
          {
@@ -1634,10 +1708,7 @@ queries:
                   // if has more powerful card than $lead (and that is not $card), die
                   foreach ($g['players'][$g['onturn']]['cards'] as $c)
                      if ($c['name'] != $card && substr($c['name'], -1) == $dcd && $c['power'] > $lead['power'])
-                     {
-                        echo '<script type="text/javascript">window.location.href="?error=4"</script>'."\n";
-                        exit;
-                     }
+                        redirect("?error=4");
                }
 
             }
@@ -1682,14 +1753,12 @@ queries:
          if ($g['rules']['emptyDraw'] === 0)
          {
             //echo '<script type="text/javascript"> window.location.href="?takecards"; </script>'."\n";
-            echo '<script type="text/javascript"> window.location.href="?parse='.$g['gid'].'"; </script>'."\n";
-            exit;
+            redirect("?parse=".$g['gid']);
          }
          else
          {
             $_SESSION['deal'] = $g['rules']['emptyDraw'];
-            echo '<script type="text/javascript"> window.location.href="?parse='.$g['gid'].'&back=?deal"; </script>'."\n";
-            exit;
+            redirect("?parse=".$g['gid']."&back=?deal");
          }
       }
 
@@ -1697,9 +1766,8 @@ queries:
       // status update
       mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
-      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'"</script>'."\n";
       //echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
-      exit;
+      redirect("?parse=".$g['gid']);
    }
    if (isset($_REQUEST['takecards']))
    {
@@ -1709,10 +1777,7 @@ queries:
       // check if it is player's turn
       // -obsolete- check if the player won the last hand
       if ($g['players'][$g['onturn']]['name'] != $_SESSION['user'])
-      {
-         echo '<script type="text/javascript">window.location.href="?error=1"</script>'."\n";
-         exit;
-      }
+         redirect("?error=1");
 
 
       // take set cards
@@ -1730,13 +1795,11 @@ queries:
       if ($g['rules']['takeDraw'] > 0)
       {
          $_SESSION['deal'] = count($g['sethands']) - 1;
-         echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&back=?deal"</script>'."\n";
-         exit;
+         redirect("?parse=".$g['gid']."&back=?deal");
       }
 
 
-      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'"</script>'."\n";
-      exit;
+      redirect("?parse=".$g['gid']);
    }
    if (isset($_REQUEST['deal']))
    {
@@ -1749,8 +1812,7 @@ queries:
       if (!isset($_SESSION['deal']))
       {
          //echo '<a href="?">Onwards</a>';
-         echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
-         exit;
+         redirect("?");
       }
       else
       {
@@ -1772,8 +1834,7 @@ queries:
       {
          $_SESSION['dealt'] = true;
          //echo '<a href="?parse='.$g['gid'].'&back=?finalize">Onwards</a>';
-         echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&back=?finalize"</script>'."\n";
-         exit;
+         redirect("?parse=".$g['gid']."&back=?finalize");
       }
 
       // check if there are enough cards in the deck
@@ -1838,9 +1899,8 @@ queries:
          }
       }
 
-      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'"</script>'."\n";
       //echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
-      exit;
+      redirect("?parse=".$g['gid']);
    }
    if (isset($_REQUEST['finalize']))
    {
@@ -1851,10 +1911,7 @@ queries:
       //    if $_SESSION['dealt'] is not set ?_
 
       if (!isset($_SESSION['dealt']))
-      {
-         echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
-         exit;
-      }
+         redirect("?");
       else
          unset($_SESSION['dealt']);
 
@@ -1873,8 +1930,7 @@ queries:
          mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES (".$g['gid'].", ".($turn+1).", ".$g['onturn'].", 'Take', NULL)");
 
          $_SESSION['dealt'] = true;
-         echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&turn='.($g['turn']+1).'&back=?finalize"</script>'."\n";
-         exit;
+         redirect("?parse=".$g['gid']."&turn=".($g['turn']+1)."&back=?finalize");
       }
 
 
@@ -1910,7 +1966,54 @@ queries:
          if ($p['name'] == $_SESSION['user'])
             $my_pid = $p['pid'];
 
-      echo '<script type="text/javascript">window.location.href="?observe='.$g['gid'].'&view='.$my_pid.'&turn='.($g['turn']+1).'"</script>'."\n";
+      redirect("?observe=".$g['gid']."&view=".$my_pid."&turn=".($g['turn']+1));
+   }
+
+   if (isset($_REQUEST['rename']))
+   {
+      $gid = mysql_real_escape_string($_REQUEST['rename']);
+
+      if (mysql_("SELECT 1 FROM rsk_games WHERE GID=$gid AND Host='".$_SESSION['user']."'", true) == 0)
+         redirect("?");
+
+      if (isset($_REQUEST['newname']))
+      {
+         $newname = mysql_real_escape_string($_REQUEST['newname']);
+         mysql_("UPDATE rsk_games SET Name='$newname' WHERE GID=$gid AND Host='".$_SESSION['user']."'");
+         redirect("?");
+      }
+
+      $gname = mysql_("SELECT Name FROM rsk_games WHERE GID=$gid");
+
+      echo '<html>'."\n";
+      echo '<head>'."\n";
+      echo '   <title>Rename Risk Jack game #'.$gid.'</title>'."\n";
+      echo '   <link rel="stylesheet" href="?css&rename" />'."\n";
+      echo '</head>'."\n";
+      echo '<body>'."\n";
+      echo "\n";
+      echo '<div class="game info">'."\n";
+      echo '   <div class="header">Rename</div>'."\n";
+      echo "\n";
+      //echo '   <div class="game-id">Game ID: <span class="gid">'.$gid.'</span></div>'."\n";
+      echo '   <div class="game-name">Game Name: <div class="name">'.$gname.'</div></div>'."\n";
+      echo "\n";
+      echo '<br />'."\n";
+      echo "\n";
+      echo '   <form action="?rename='.$gid.'" method="POST">'."\n";
+      echo '      <label>'."\n";
+      echo '         New Name: <br />'."\n";
+      echo '         <input type="text" name="newname" placeholder="New Name" />'."\n";
+      echo '      </label>'."\n";
+      echo '<br />'."\n";
+      echo '<br />'."\n";
+      echo '      <input type="submit" value="Rename" />'."\n";
+      echo '   </form>'."\n";
+      echo '</div>'."\n";
+      echo "\n";
+      echo '</body>'."\n";
+      echo '</html>'."\n";
+
       exit;
    }
 }
@@ -1940,8 +2043,8 @@ parse:
       {
          echo "Couldn't find specified game (id: $gid)"."\n";
          echo '<a href="?">Back</a>'."\n";
-         echo '<script type="text/javascript">setTimeout(\'window.location.href="?";\', 0);</script>'."\n";
-         exit;
+         //echo '<script type="text/javascript">setTimeout(\'window.location.href="?";\', 0);</script>'."\n";
+         redirect("?");
       }
 
 
@@ -2139,8 +2242,7 @@ parse:
       //echo '<a href="'.(isset($_REQUEST['back'])? str_replace("*","&",mysql_real_escape_string($_REQUEST['back'])) : '?').'">Back</a>'."\n";
       //var_dump($g);
 
-      echo '<script type="text/javascript">window.location.href="'.(isset($_REQUEST['back'])? str_replace("*","&",mysql_real_escape_string($_REQUEST['back'])) : '?').'";</script>'."\n";
-      exit;
+      redirect((isset($_REQUEST['back'])? str_replace("*","&",mysql_real_escape_string($_REQUEST['back'])) : '?'));
    }
 }
 
@@ -2164,8 +2266,7 @@ observe:
       if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid || $_SESSION['game']['turn']!=$turn)
       {
          // parse game
-         echo '<script type="text/javascript">window.location.href="?parse='.$gid.'&turn='.$turn.'&back=?observe='.$gid.'*view='.$my_pid.'*turn='.$turn.'";</script>'."\n";
-         exit;
+         redirect("?parse=".$gid."&turn=".$turn."&back=?observe=".$gid."*view=".$my_pid."*turn=".$turn);
       }
 
       $g = &$_SESSION['game'];
@@ -2404,8 +2505,43 @@ observe:
       echo '</div>'."\n";
 
 
+      // Spectator Controls
+
+      echo '<div id="obs:controls" class="controls">'."\n";
+      echo '   <div class="control slow-down" onclick="control_speed(1);">Slow down</div>'."\n";
+      echo '   <div class="control pause-play" onclick="control_toggle_play(); this.innerHTML = this.innerHTML==\'Pause\'? \'Play\' : \'Pause\';">Pause</div>'."\n";
+      echo '   <div class="control speed-up" onclick="control_speed(-1);">Speed up</div>'."\n";
+      echo '   <div class="control back-once" onclick="control_go_back(1);">Back a turn</div>'."\n";
+      echo '   <div class="control exit" onclick="control_exit();">Exit</div>'."\n";
+      echo '</div>'."\n";
+
+
       echo "\n";
       echo '</body>'."\n";
+
+
+      echo '<script type="text/javascript">'."\n";
+      ////MAKE "obs:controls" MOVABLE
+      echo "\n";
+      echo 'function control_speed (m)'."\n";
+      echo '{'."\n";
+      echo '   return true; ////'."\n";
+      echo '}'."\n";
+      echo 'function control_toggle_play ()'."\n";
+      echo '{'."\n";
+      echo '   clearTimeout(spectator_autoplay);////'."\n";
+      echo '   return true;'."\n";
+      echo '}'."\n";
+      echo 'function control_go_back ()'."\n";
+      echo '{'."\n";
+      echo '   return true; ////'."\n";
+      echo '}'."\n";
+      echo 'function control_exit ()'."\n";
+      echo '{'."\n";
+      echo '   window.location.href = "?";'."\n";
+      echo '   return true;'."\n";
+      echo '}'."\n";
+      echo '</script>'."\n";
 
 
       // auto-play
@@ -2422,7 +2558,7 @@ observe:
          if ($oAction == "Draw")
             echo '   speed = '.(observe_speed/2).';'."\n";
 
-         echo '   setTimeout(\'window.location.href="?observe='.$gid.'&turn='.($turn+1).'"\', speed);'."\n";
+         echo '   spectator_autoplay = setTimeout(\'window.location.href="?observe='.$gid.'&turn='.($turn+1).'"\', speed);'."\n";
          echo '</script>'."\n";
          echo "\n";
       }
@@ -2446,8 +2582,7 @@ ingame:
       if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid || $_SESSION['game']['turn']!=$turn)
       {
          // parse game
-         echo '<script type="text/javascript">window.location.href="?parse='.$gid.'&turn='.$turn.'&back=?";</script>'."\n";
-         exit;
+         redirect("?parse=".$gid."&turn=".$turn."&back=?");
       }
 
       $g = &$_SESSION['game'];
@@ -2475,8 +2610,7 @@ ingame:
       if ($g['gameover'])
       {
          $_SESSION['dealt'] = true;
-         echo '<script type="text/javascript">window.location.href="?finalize"</script>'."\n";
-         exit;
+         redirect("?finalize");
       }
 
 
@@ -2722,7 +2856,6 @@ ingame:
       echo '<script type="text/javascript" src="?js&movables=ingame"></script>'."\n";
 
       // animation
-      echo '<script type="text/javascript" src="?js&loadingOverhaul"></script>'."\n";
       echo '<script type="text/javascript" src="test.php?animation"></script>'."\n";
 
       // polling
@@ -2744,6 +2877,9 @@ pregame:
    if (isset($_SESSION['user']) && mysql_("SELECT * FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0'",true)>0)
    {
       $g = mysql_("SELECT p.GameID as gid, g.Name as name, g.Host as host, p.PID as my_pid, g.PlayerCount as playerCount, g.startingHand as startingHand, g.turnDraw as turnDraw, g.takeDraw as takeDraw, g.emptyDraw as emptyDraw, g.forcedAnswer as forcedAnswer, g.forcedRaise as forcedRaise FROM rsk_players as p, rsk_games as g WHERE p.GameID = g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished='0' LIMIT 1", MYSQL_ASSOC);
+
+      // No game should be loaded now, but just in case some "session restore" feature gets too smart
+      unset($_SESSION['game']);
 
 
       echo '<html>'."\n";
@@ -2978,6 +3114,9 @@ lobby:
 {
    if (isset($_SESSION['user']))
    {
+      // No game should be loaded now, but just in case some "session restore" feature gets too smart
+      unset($_SESSION['game']);
+
       echo '<html>'."\n";
       echo '<head>'."\n";
       echo '   <title>Risk Jack - Lobby</title>'."\n";
@@ -2997,6 +3136,7 @@ lobby:
       echo "\n";
       echo '   <script type="text/javascript">'."\n";
       echo '      function filterGames (category, keyword) {'."\n";
+      echo '         //REALLY BAD FILTERING'."\n";
       echo '         var cnt = document.getElementById("cnt:games-"+category);'."\n";
       echo "\n";
       echo '         var i;'."\n";
@@ -3014,7 +3154,7 @@ lobby:
       echo '                  if (cnt.childNodes[i].childNodes[j].innerHTML.indexOf(keyword) == -1)'."\n";
       echo '                     cnt.childNodes[i].className += " hidden";'."\n";
       echo '                  else'."\n";
-      echo '                     cnt.childNodes[i].className = cnt.childNodes[i].className.replace(/( |^)hidden( |$)/gi, "");'."\n";
+      echo '                     cnt.childNodes[i].className = cnt.childNodes[i].className.replace(/( |^)hidden/gi, "");'."\n";
       echo '               }'."\n";
       echo '            }'."\n";
       echo '         }'."\n";
@@ -3084,6 +3224,14 @@ lobby:
          echo '            <span class="forced-raise"  title="Forced to raise">' .($game['forcedRaise']==1? "yes" : "no").'</span>'."\n";
          echo '            <span class="turn-draw"     title="Draw each turn">'  .($game['turnDraw']==1? "yes" : "no").'</span>'."\n";
          echo '         </div>'."\n";
+
+         if ($game['Host'] == $_SESSION['user'])
+         {
+            echo '         <div class="options">'."\n";
+            echo '            <div class="option rename" title="Rename game" onclick="window.location.href=\'?rename='.$game['GID'].'\'; event.stopPropagation(); event.cancelBubble=true;">Rename</div>'."\n";
+            echo '         </div>'."\n";
+         }
+
          echo '      </div>'."\n";
       }
       echo '   </div>'."\n";
@@ -3109,6 +3257,9 @@ login:
 {
    if (isset($_SESSION['user']))
       exit;
+
+   // No game should be loaded now, but just in case some "session restore" feature gets too smart
+   unset($_SESSION['game']);
 
    echo '<html>'."\n";
    echo '<head>'."\n";
