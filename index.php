@@ -430,15 +430,15 @@ body {
    width: 7.5em;
    border-radius: 1em;
    text-align: center;
-   cursor: pointer
-   color: #36516C;
+   cursor: pointer;
+   color: black; /* #36516C; */
    text-decoration: none;
    font-weight: bold;
    background-color: rgba(100, 150, 200, 0.5);
    box-shadow: 0em 0em 0.5em 0.5em rgba(100, 150, 200, 0.5);
 }
 .action:hover {
-   color: black;
+   /* color: black; */
    background-color: rgba(100, 150, 200, 1);
    box-shadow: 0em 0em 0.5em 0.5em rgba(100, 150, 200, 1);
 }
@@ -1532,6 +1532,15 @@ observe:
             }
          }
 
+         $s = count($cards_inHand);
+         foreach ($opponents as $p)
+            $s += $p['cards'];
+         $s += $cards_inDeck;
+      $game_over = $s==0;
+
+      //if ($game_over && _last_action!=take) insert take ////
+
+
       $player_onTurn_name = mysql_("SELECT Player FROM rsk_players WHERE GameID='$gid' AND PID=$player_onTurn"); //name of player currently on turn
 
 
@@ -1556,6 +1565,103 @@ observe:
 
       echo '<body>'."\n";
       echo "\n";
+
+
+      if ($game_over)
+      {
+         $players = array();
+
+            $opponents[$my_pid] = array("name"=>$_SESSION['user']);
+
+         foreach ($opponents as $pid=>$player)
+         {
+            $players[$pid] = array("name"=>$player['name'], "hands"=>array());
+
+            $takes = mysql_("SELECT Turn FROM rsk_turns WHERE GameID='$gid' AND Player=$pid AND Action='Take' ORDER BY Turn ASC", MYSQL_ASSOC|MYSQL_TABLE);
+
+            if (count($takes) == 0)
+               continue;
+
+            $prev = 0;
+            foreach ($takes as $t)
+            {
+               $players[$pid]['hands'][] = mysql_(
+                  "SELECT ".
+                   "c.Card as name, ".
+                   "c.Img as img, ".
+                   "c.Fullname as fullname, ".
+                   "c.Value as value ".
+                  "FROM ".
+                   "rsk_cards as c, ".
+                   "rsk_turns as t ".
+                  "WHERE ".
+                   "c.Card = t.Card AND ".
+                   "t.GameID='$gid' AND ".
+                   "t.Action='Play' AND ".
+                   "t.Turn > ".max(0, mysql_(
+                     "SELECT ".
+                      "Turn ".
+                     "FROM ".
+                      "rsk_turns ".
+                     "WHERE ".
+                      "GameID='$gid' AND ".
+                      "Action='Take' AND ".
+                      "Turn <".$t['Turn']." ".
+                     "ORDER BY ".
+                      "Turn ".
+                      "DESC ".
+                     "LIMIT 1")).
+                   " AND ".
+                   "t.Turn < ".$t['Turn']." ".
+                  "ORDER BY ".
+                   "t.Turn ASC",
+               MYSQL_ASSOC);
+            }
+         }
+
+         ksort($players);
+
+         //----------////
+
+         foreach ($players as $p)
+         {
+            echo '<div class="player" style="margin-bottom: 1em; border-bottom: 2px solid gray;">'."\n";
+            echo '   <div class="name"><b>'.$p['name'].'</b></div>'."\n";
+            echo "\n";
+
+            $points = 0;
+
+            echo '   <div class="hands">'."\n";
+            foreach ($p['hands'] as $hand)
+            {
+               $points_hand = 0;
+
+               echo '      <div class="hand" style="margin-bottom: 0.5em;">'."\n";
+               foreach ($hand as $card)
+               {
+                  echo '      <div class="card">'."\n";
+                  echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
+                  echo '         <div class="name">'.$card['fullname'].'</div>'."\n";
+                  echo '      </div>'."\n";
+                  $points_hand += $card['value'];
+               }
+               $points_hand += (count($hand)/$playerCount)-1;
+               echo '         <div class="points">'.$points_hand.'</div>'."\n";
+               echo '      </div>'."\n";
+
+               $points += $points_hand;
+            }
+            echo '   </div>'."\n";
+            echo '   <div class="points" style="float:right;">'.$points.'</div>'."\n";
+            echo '</div>'."\n";
+         }
+
+
+         echo "\n";
+         echo '</body>'."\n";
+         echo '</html>'."\n";
+         exit;
+      }
 
 
       // Deck Section
@@ -1917,8 +2023,8 @@ ingame:
       echo "\n";
       if ($can_take)
       {
-         echo '   <div class="action">'."\n";
-         echo '      <a href="?takecards">Take</a>'."\n";
+         echo '   <div class="action" onclick="window.location.href=\'?takecards\';">'."\n";
+         echo '      Take'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -1943,8 +2049,8 @@ ingame:
       echo "\n";
       if ($can_draw)
       {
-         echo '   <div class="action">'."\n";
-         echo '      <a href="?draw">Draw</a>'."\n";
+         echo '   <div class="action" onclick="window.location.href=\'?draw\';">'."\n";
+         echo '      Draw'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
