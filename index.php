@@ -909,8 +909,24 @@ js:
       {
          echo '   xmlhttp = new Array();'."\n";
          echo "\n";
-         echo 'function call(url, callback, sync){'."\n";
-         echo '   async = (typeof callback == "boolean")? !callback : (sync!=null)? !sync : true;'."\n";
+         echo 'function call(url, callback, sync, method){'."\n";
+         echo '   var async = (typeof callback == "boolean")? !callback : (sync!=null)? !sync : true;'."\n";
+//         echo '   var async = true;'."\n";
+//         echo '   var methd = "GET";'."\n";
+//         echo "\n";
+//         echo '   if (typeof callback == "boolean" && typeof sync != "boolean")'."\n";
+//         echo '      async = !callback;'."\n";
+//         echo '   if (typeof method == "boolean" && typeof sync != "boolean")'."\n";
+//         echo '      async = !method;'."\n";
+//         echo '   if (typeof callback == "string"  && typeof method != "string")'."\n";
+//         echo '      methd = callback.toUpperCase();'."\n";
+//         echo '   if (typeof sync == "string" && typeof method != "string")'."\n";
+//         echo '      methd = sync.toUpperCase();'."\n";
+//         echo '   else'."\n";
+//         echo '      async = !sync;'."\n";
+//         echo '   if (typeof method == "string")'."\n";
+//         echo '      methd = method.toUpperCase();'."\n";
+//         echo "\n";
          echo "\n";
          echo '   if(window.XMLHttpRequest)'."\n";
          echo '      var xh = new XMLHttpRequest();'."\n";
@@ -921,7 +937,7 @@ js:
          echo '      return false;'."\n";
          echo "\n";
          echo "\n";
-         echo '   if(typeof callback != "boolean" && callback!=null)'."\n";
+         echo '   if(typeof callback == "function")'."\n"; //changed
          echo '      xh.onreadystatechange = function(){'."\n";
          echo '         if (this.readyState==4 && this.status==200)'."\n";
          echo '            callback(this.responseText);'."\n";
@@ -2578,6 +2594,7 @@ ingame:
       $my_pid = $q['PID'];
 
       $turn = mysql_("SELECT Turn FROM rsk_turns WHERE GameID=$gid", true);
+      $status = mysql_("SELECT `Value` FROM rsk_status WHERE `Key`='game:$gid'");
 
       if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid || $_SESSION['game']['turn']!=$turn)
       {
@@ -2598,12 +2615,13 @@ ingame:
 
       echo '<html>'."\n";
       echo '<head>'."\n";
-      echo '   <title>Risk Jack - In Game</title>'."\n";
+      echo '   <title>Risk Jack - In Game</title>'."\n"; /// this line is important for "js&animation"
       echo '   <script type="text/javascript" src="?js&call&poll&clean"></script>'."\n";
       echo '   <link rel="stylesheet" type="text/css" href="?css&ingame" />'."\n";
       echo '</head>'."\n";
 
       echo '<body>'."\n";
+      echo '   <input type="hidden" id="game_status" value="'.$status.'" />'."\n"; /// helps in "js&animation" by preventing multiple refreshes
       echo "\n";
 
 
@@ -2856,6 +2874,7 @@ ingame:
       echo '<script type="text/javascript" src="?js&movables=ingame"></script>'."\n";
 
       // animation
+      echo '<script type="text/javascript" src="jquery.js"></script>'."\n";
       echo '<script type="text/javascript" src="test.php?animation"></script>'."\n";
 
       // polling

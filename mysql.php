@@ -84,8 +84,13 @@ function mysql_($query, $p=false){
                   array( mysql_fetch_array($q, $p) )
                   :      mysql_fetch_array($q, $p);
       else{
-         while($r = mysql_fetch_array($q, $p))
-            $a[] = $r;
+         if(mysql_num_fields($q)==1){
+            for($i=0;$i<mysql_num_rows($q);$i++)
+               $a[] = mysql_result($q, $i, 0);
+         }else{
+            while($r = mysql_fetch_array($q, $p))
+               $a[] = $r;
+         }
 
          return $a;
       }
