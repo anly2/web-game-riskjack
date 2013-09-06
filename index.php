@@ -14,8 +14,9 @@ variables:
 
 login_check:
 {
-   if (mysql_("SELECT Username FROM rsk_users WHERE SID='".session_id()."'", true) > 0)
-      $_SESSION['user'] = mysql_("SELECT Username FROM rsk_users WHERE SID='".session_id()."'");
+      $stayin = isset($_COOKIE['stayin'])? mysql_real_escape_string($_COOKIE['stayin']) : "";
+   if (mysql_("SELECT Username FROM rsk_users WHERE SID='".session_id()."' OR SID='$stayin'", true) > 0)
+      $_SESSION['user'] = mysql_("SELECT Username FROM rsk_users WHERE SID='".session_id()."' OR SID='$stayin'");
    else
       unset($_SESSION['user']);
 }
@@ -50,6 +51,11 @@ body {
    background-color: rgba(100, 150, 200, 1);
    border-radius: 1em;
    padding: 1em;
+}
+
+.login.main .remember {
+   float: right;
+   margin: 0.25em 0 -0.25em -2em;
 }
 
 .login.main input {
@@ -574,6 +580,90 @@ a {
 .opponents .player {
    margin: 2em 4em 2em -4em;
 }
+
+.scoreboard {
+   display: block;
+   width: 80%;
+   margin: 5% auto 0%;
+}
+.scoreboard > .player {
+   display: block;
+   margin: 2em 0em;
+   padding: 1em;
+   border-radius: 1em;
+   background-color: rgba(170, 205, 65, 1);
+   box-shadow: 0px 0px 5px 5px rgba(170, 205, 65, 1);
+   width: auto;
+   overflow: auto;
+}
+.scoreboard > .player > .name {
+   font-size: 1.1em;
+   font-weight: bold;
+   text-align: center;
+}
+.scoreboard > .player > .total.points {
+   font-size: 1.5em;
+   text-align: center;
+   margin-bottom: 0.5em;
+}
+.scoreboard > .player > .total.points:after {
+   content: ' points';
+   font-size: 0.67em;
+}
+.scoreboard > .player > .hands > .hand {
+   display: inline-block;
+   padding-right: 3.75em;
+   float: left;
+}
+.scoreboard > .player > .hands > .hand:not(:last-of-type) {
+   margin-right: 2em;
+}
+.scoreboard > .player > .hands > .hand > .card {
+   display: inline-block;
+   width: 0.5em;
+}
+.scoreboard > .player > .hands > .hand > .score {
+   display: block;
+   margin: 0em -1.75em 0.25em 1.75em;
+   text-align: center;
+}
+.scoreboard > .player > .hands > .hand > .score > .bonus.points:before {
+   content: '+ ';
+}
+.scoreboard > .player > .hands > .hand > .score > .hand.points:before {
+   content: '= ';
+}
+.scoreboard > .player > .hands > .hand > .score > .points {
+   display: inline-block;
+}
+
+.scoreboard .back[name="fixed"] {
+   position: fixed;
+   top: 15%;
+   left: 0.75em;
+}
+.scoreboard .back:not([name="fixed"]) {
+   display: block;
+   width: 2em;
+   margin-left: auto;
+   margin-right: auto;
+}
+.scoreboard .back {
+   color: inherit;
+   font-weight: bold;
+   text-decoration: none;
+
+   padding: 1em;
+   border-top-right-radius: 2em;
+   border-bottom-left-radius: 2em;
+   background-color: rgba(100, 150, 200, 0.5);
+   box-shadow: 0em 0em 0.5em 0.5em rgba(100, 150, 200, 0.5);
+}
+.scoreboard .back:hover {
+   text-decoration: underline;
+   background-color: rgba(100, 150, 200, 1);
+   box-shadow: 0em 0em 0.5em 0.5em rgba(100, 150, 200, 1);
+}
 EOT;
       }
 
@@ -628,7 +718,7 @@ js:
          echo '   if (!pollfor) return false;'."\n";
          echo "\n";
          echo '   call("?poll="+pollfor+(!state? "" : "&state="+state),'."\n";
-         echo '      function(t){'."\n";
+         echo '      function(t){//alert(t);'."\n";
          echo '         if(t=="1")'."\n";
          echo '            window.location.href="?";'."\n";
          echo '         else'."\n";
@@ -825,6 +915,12 @@ login_queries:
       if (mysql_affected_rows() > 0)
       {
          $_SESSION['user'] = $usr;
+
+         if (isset($_REQUEST['remusr']) && $_REQUEST['remusr'])
+            setcookie('remember', $usr, time() + 2592000); //expire after 30 days
+
+         if (isset($_REQUEST['stayin']) && $_REQUEST['stayin'])
+            setcookie('stayin', session_id(), time() + 2592000); //expire after 30 days
 
          //Success
          echo '<script type="text/javascript">window.location.href="?silent&clean='.$p.'";</script>'."\n";
@@ -1106,10 +1202,6 @@ queries:
          //Prepare Deck
          $allcards = mysql_("SELECT Card FROM rsk_cards", MYSQL_NUM);
 
-         //    array_reduce
-         foreach ($allcards as $k=>$v)
-            $allcards[$k] = $v[0];
-
          //    suffle deck
          shuffle($allcards);
 
@@ -1154,7 +1246,8 @@ queries:
 
    if (isset($_REQUEST['play']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      //$g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      $g = &$_SESSION['game'];
 
       $card = mysql_real_escape_string($_REQUEST['play']);
       if (mysql_("SELECT Card FROM rsk_cards WHERE Card='$card' LIMIT 1", true) == 0)
@@ -1169,19 +1262,25 @@ queries:
       // check if is allowed to play the card
       //    see rule:forcedAnswer
       //    see rule:forcedRaise
-      ////
+
+
 
       // if the action is hand-initializing
       //    if rule:turnDraw is enabled
       //       if there are NO draw actions yet
       //          $_SESSION['deal'] = 1
       //          ?deal
-      ////
+      ////take extra care for parsing
 
 
       // play the card
-      $g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
-      mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['GameID']."', ".($g['Turn']+1).", '".$g['PID']."', 'Play', '$card')");
+      //$g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
+      $my_pid = null;
+      foreach ($g['players'] as $p)
+         if ($p['name'] == $_SESSION['user'])
+            $my_pid = $p['pid'];
+
+      mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['gid']."', ".($g['turn']+1).", '".$my_pid."', 'Play', '$card')");
 
 
       // -obsolete- if the action is hand-finilizing
@@ -1194,99 +1293,69 @@ queries:
       //          //?takecards
       //       /// Players need to see what happened, this gives no time
 
-      $players = array();
-      $q = mysql_("SELECT Player, PID FROM rsk_players WHERE GameID='".$g['GameID']."' AND Finished='0'", MYSQL_ASSOC|MYSQL_TABLE);
-      foreach ($q as $p)
-         $players[$p['PID']] = array("name"=>$p['Player'], "cards"=>0);
-
-      $q = mysql_("SELECT Action, Player FROM rsk_turns WHERE GameID='".$g['GameID']."' AND (Action='Draw' OR Action='Play')", MYSQL_ASSOC|MYSQL_TABLE);
-      foreach ($q as $v)
-      {
-         if ($v['Action'] == "Draw")
-            $players[$v['Player']]['cards'] ++;
-
-         if ($v['Action'] == "Play")
-            $players[$v['Player']]['cards'] --;
-      }
-
-      if (isset($_SESSION['playcard']))
-         $players[$my_pid]['cards']--;
-
-      $s = 0;
-      foreach ($players as $p)
-         $s += $p['cards'];
+      $s = -1; //account for the currently played card
+      foreach ($g['players'] as $p)
+         $s += count($p['cards']);
 
       if ($s == 0)
       {
-         $rule_emptyDraw = mysql_("SELECT emptyDraw FROM rsk_games WHERE GID='".$g['GameID']."' LIMIT 1");
-
-         if ($rule_emptyDraw === 0)
+         if ($g['rules']['emptyDraw'] === 0)
          {
             //echo '<script type="text/javascript"> window.location.href="?takecards"; </script>'."\n";
-
-            //echo '<a href="?">Onwards</a>';
-            echo '<script type="text/javascript"> window.location.href="?"; </script>'."\n";
+            echo '<script type="text/javascript"> window.location.href="?parse='.$g['gid'].'"; </script>'."\n";
             exit;
          }
          else
          {
-            $_SESSION['deal'] = $rule_emptyDraw;
-            //echo '<a href="?deal='.$_SESSION['deal'].'">Onwards</a>';
-            echo '<script type="text/javascript"> window.location.href="?deal"; </script>'."\n";
+            $_SESSION['deal'] = $g['rules']['emptyDraw'];
+            echo '<script type="text/javascript"> window.location.href="?parse='.$g['gid'].'&back=?deal"; </script>'."\n";
             exit;
          }
       }
 
 
       // status update
-      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
-      //echo '<a href="?">Onwards</a>';
-      echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
+      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'"</script>'."\n";
+      //echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
       exit;
    }
    if (isset($_REQUEST['takecards']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      //$g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      $g = &$_SESSION['game'];
 
       // check if it is player's turn
       // check if the player won the last hand
 
       // take set cards
-      $g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
-      mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['GameID']."', ".($g['Turn']+1).", '".$g['PID']."', 'Take', NULL)");
+      //$g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
+      mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['gid']."', ".($g['turn']+1).", '".$g['onturn']."', 'Take', NULL)");
 
       // status update
-      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
       // see rule:takeDraw
       //    if enabled
       //       - set $_SESSION['deal'] = ?deal=
       //       ?deal
 
-      $rule_takeDraw = mysql_("SELECT takeDraw FROM rsk_games WHERE GID='".$g['GameID']."' LIMIT 1");
-      if ($rule_takeDraw)
+      if ($g['rules']['takeDraw'] > 0)
       {
-            $prevTake = max(0, mysql_("SELECT Turn FROM rsk_turns WHERE GameID='".$g['GameID']."' AND Action='Take' ORDER BY Turn DESC LIMIT 1, 1"));
-         $cards = mysql_("SELECT Action FROM rsk_turns WHERE GameID='".$g['GameID']."' AND Action='Play' AND Turn < ".($g['Turn']+1)." AND Turn > $prevTake", true);
-         $playerCount = mysql_("SELECT GameID FROM rsk_players WHERE GameID='".$g['GameID']."' AND Finished=0", true);
-         $hands = max(1, floor($cards/$playerCount));
-
-
-         $_SESSION['deal'] = $hands - 1;
-         //echo '<a href="?deal='.$_SESSION['deal'].'">Onwards</a>';
-         echo '<script type="text/javascript">window.location.href="?deal"</script>'."\n";
+         $_SESSION['deal'] = count($g['sethands']) - 1;
+         echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&back=?deal"</script>'."\n";
          exit;
       }
 
 
-      echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
+      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'"</script>'."\n";
       exit;
    }
    if (isset($_REQUEST['deal']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
-      $gid = $g['GameID'];
+      //$g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      $g = &$_SESSION['game'];
 
       // check if this is a direct call
       //    if $_SESSION['deal'] is not set die
@@ -1303,20 +1372,21 @@ queries:
          unset($_SESSION['deal']);
       }
 
-      // if no cards left to deal
+      // if no cards left to deal and no cards in hands
       //    - set $_SESSION['dealt']
       //    ?finalize
 
+      $s = 0;
+      foreach ($g['players'] as $p)
+         $s += count($p['cards']);
 
-         $allcards = mysql_("SELECT COUNT(GameID) FROM rsk_decks WHERE GameID='$gid'");
-         $drawncards = mysql_("SELECT COUNT(GameID) FROM rsk_turns WHERE GameID='$gid' AND Action='Draw'");
-      $cards_inDeck = $allcards - $drawncards; //number of left cards in deck
+      $cards_inDeck = count($g['cards']['indeck']);
 
-      if ($cards_inDeck == 0)
+      if ($cards_inDeck == 0 && $s == 0)
       {
          $_SESSION['dealt'] = true;
-         echo '<a href="?finalize">Onwards</a>';
-         //echo '<script type="text/javascript">window.location.href="?finalize"</script>'."\n";
+         //echo '<a href="?parse='.$g['gid'].'&back=?finalize">Onwards</a>';
+         echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&back=?finalize"</script>'."\n";
          exit;
       }
 
@@ -1325,7 +1395,7 @@ queries:
       //       divide equally
 
 
-         $playerCount = mysql_("SELECT GameID FROM rsk_players WHERE GameID='$gid' AND Finished='0'", true);
+         $playerCount = count($g['players']);
       if ($deal * $playerCount > $cards_inDeck)
       {
             $o = $cards_inDeck % $playerCount;
@@ -1341,6 +1411,8 @@ queries:
          for ($i=0; $i < $playerCount; $i++)
             $pc[$i+1] = 0;
 
+            $drawncards = count($g['cards']['drawn']);
+
          while ($dealt < $deal * $playerCount)
          {
             for ($j=0; $j < cardsPerDeal; $j++)
@@ -1348,14 +1420,13 @@ queries:
                if ($pc[$p+1] + 1 > $deal)
                   break;
 
-               $card = mysql_("SELECT Card FROM rsk_decks WHERE GameID='".$g['GameID']."' AND Position=".($drawncards + $dealt));
-               $g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
-               mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['GameID']."', ".($g['Turn']+1).", ".($p+1).", 'Draw', '".$card."')") or die(mysql_error());
+               $card = mysql_("SELECT Card FROM rsk_decks WHERE GameID='".$g['gid']."' AND Position=".($drawncards + $dealt));
+               $turn = $g['turn'] + $dealt;
+               mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['gid']."', ".($turn+1).", ".($p+1).", 'Draw', '".$card."')") or die(mysql_error());
 
                $dealt++;
                $pc[$p+1]++;
-               //$drawncards++; //messes with Position=".($drawbcards + $dealt)."
-               $cards_inDeck--;
+               $cards_inDeck--; //needed later in the script
             }
 
             $p = (++$p) % $playerCount;
@@ -1363,7 +1434,7 @@ queries:
 
 
       // status update
-      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
       // check for left-over cards
       //    if cardsLeft < playerCount
@@ -1371,22 +1442,24 @@ queries:
 
       if ($cards_inDeck < $playerCount)
       {
+            $allcards = count($g['cards']['all']);
          for ($i=0; $i < $cards_inDeck; $i++)
          {
-            $card = mysql_("SELECT Card FROM rsk_decks WHERE GameID='".$g['GameID']."' AND Position=".($allcards - ($cards_inDeck - $i)));
-            $g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
-            mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['GameID']."', ".($g['Turn']+1).", -1, 'Draw', '".$card."')") or die(mysql_error()); // Player=-1 basically removes the card from play
+            $card = mysql_("SELECT Card FROM rsk_decks WHERE GameID='".$g['gid']."' AND Position=".($allcards - ($cards_inDeck - $i)));
+            $turn = $g['turn'] + $dealt + $i;
+            mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['gid']."', ".($turn+1).", -1, 'Draw', '".$card."')") or die(mysql_error()); // Player=-1 basically removes the card from play
             //$cards_inDeck--; //might mess with the for-loop
          }
       }
 
-      //echo '<a href="?">Onwards</a>';
-      echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
+      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'"</script>'."\n";
+      //echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
       exit;
    }
    if (isset($_REQUEST['finalize']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      //$g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1", MYSQL_ASSOC);
+      $g = &$_SESSION['game'];
 
       // check if this is a direct call
       //    if $_SESSION['dealt'] is not set ?_
@@ -1405,26 +1478,271 @@ queries:
       //  --- check if hands are empty
 
 
+      // check (using &$g) if there are untaken cards
+      //    if so, insert Take
 
-      // clean rsk_decks
+      if (count($g['sethands']) > 0)
+      {
+         $turn = mysql_("SELECT GameID FROM rsk_turns WHERE GameID=".$g['gid'], true);
+         mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES (".$g['gid'].", ".($turn+1).", ".$g['onturn'].", 'Take', NULL)");
 
-      mysql_("DELETE FROM rsk_decks WHERE GameID='".$g['GameID']."'");
+         $_SESSION['dealt'] = true;
+         echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&turn='.($g['turn']+1).'&back=?finalize"</script>'."\n";
+         exit;
+      }
 
 
       // set finished flags in rsk_players
 
-      mysql_("UPDATE rsk_players SET Finished=1 WHERE GameID='".$g['GameID']."' AND Finished=0");
+      mysql_("UPDATE rsk_players SET Finished=1 WHERE GameID='".$g['gid']."' AND Player='".$_SESSION['user']."'");
 
 
-      // update status for lobby
-      // remove status entry game:$gid
+      // if all players are "finished", clean the game
 
-      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='lobby'");
-      mysql_("DELETE FROM rsk_status WHERE `Key`='game:".$g['GameID']."'");
+      if (0==mysql_("SELECT Finished FROM rsk_players WHERE GameID=".$g['gid']." AND Finished=0", true))
+      {
+         // clean rsk_decks
 
-      $turns = mysql_("SELECT GameID FROM rsk_turns WHERE GameID='".$g['GameID']."'", true);
-      //echo '<a href="?observe='.$g['GameID'].'&turn='.($turns+1).'">Onwards</a>';
-      echo '<script type="text/javascript">window.location.href="?observe='.$g['GameID'].'&turn='.($turns+1).'"</script>'."\n";
+         mysql_("DELETE FROM rsk_decks WHERE GameID='".$g['gid']."'");
+
+
+         // update status for lobby
+         // remove status entry game:$gid
+
+         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='lobby'");
+         mysql_("DELETE FROM rsk_status WHERE `Key`='game:".$g['gid']."'");
+      }
+      else
+      {
+         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
+      }
+
+
+      //$turns = mysql_("SELECT GameID FROM rsk_turns WHERE GameID='".$g['gid']."'", true);
+      $my_pid = null;
+      foreach ($g['players'] as $p)
+         if ($p['name'] == $_SESSION['user'])
+            $my_pid = $p['pid'];
+
+      echo '<script type="text/javascript">window.location.href="?observe='.$g['gid'].'&view='.$my_pid.'&turn='.($g['turn']+1).'"</script>'."\n";
+      exit;
+   }
+}
+
+parse:
+{
+   if (isset($_REQUEST['dump']))
+   {
+      echo "<pre>",var_dump($_SESSION['game']),"</pre>";
+      exit;
+   }
+
+   if (isset($_REQUEST['parse']))
+   {
+      // This is meant to fill $_SESSION['game'] with the appropriate content
+
+      $gid = mysql_real_escape_string($_REQUEST['parse']);
+      if (trim($gid) == '')
+         $gid = mysql_("SELECT GameID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1");
+
+      if (mysql_("SELECT GID FROM rsk_games WHERE GID='$gid'", true) == 0)
+      {
+         echo "Couldn't find specified game (id: $gid)"."\n";
+         echo '<a href="?">Back</a>'."\n";
+         echo '<script type="text/javascript">setTimeout(\'window.location.href="?";\', 0);</script>'."\n";
+         exit;
+      }
+
+
+      $g = &$_SESSION['game'];
+
+
+
+      if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid)
+      {
+         $_SESSION['game'] = array();
+
+
+         $g['gid'] = $gid;
+         $q = mysql_("SELECT * FROM rsk_games WHERE GID=$gid LIMIT 1", MYSQL_ASSOC);
+
+         $g['name'] = $q['Name'];
+         $g['timestamp'] = $q['Played'];
+         $g['host'] = $q['Host'];
+
+         $g['rules'] = array(
+            "playerCount"  =>$q['PlayerCount'],
+            "startingHand" =>$q['startingHand'],
+            "turnDraw"     =>$q['turnDraw'],
+            "emptyDraw"    =>$q['emptyDraw'],
+            "takeDraw"     =>$q['takeDraw'],
+            "forcedAnswer" =>$q['forcedAnswer'],
+            "forcedRaise"  =>$q['forcedRaise']
+         );
+
+
+         $g['players'] = array();
+         $p = mysql_("SELECT Player, PID FROM rsk_players WHERE GameID=$gid");
+
+         foreach ($p as $v)
+         {
+            $g['players'][$v['PID']] = array(
+               "name"  =>$v['Player'],
+               "pid"   =>$v['PID'],
+               "cards" =>array(),
+               "takes" =>array()
+            );
+         }
+
+
+         $g['finished'] = 0==mysql_("SELECT Finished FROM rsk_players WHERE GameID=$gid AND Finished=0", true);
+
+
+         $g['cards']['all'] =
+            $g['finished']?
+               mysql_("SELECT Card FROM rsk_turns WHERE GameID='$gid' AND Action='Draw' ORDER BY Turn ASC")
+               :
+               mysql_("SELECT Card FROM rsk_decks WHERE GameID='$gid' ORDER BY Position ASC");
+      }
+
+
+
+
+         $g['finished'] = 0==mysql_("SELECT Finished FROM rsk_players WHERE GameID=$gid AND Finished=0", true);
+
+         if (isset($_REQUEST['turn']))
+            $turn = intval($_REQUEST['turn']);
+         else
+            $turn = $g['finished']? 0 : mysql_("SELECT GameID FROM rsk_turns WHERE GameID='$gid'", true);
+
+
+
+
+      if (!isset($_SESSION['game']['turn']) || $g['turn']!=$turn)
+      {
+         if (isset($_SESSION['game']['turn']))
+            $old_turn = $_SESSION['game']['turn'];
+
+         $g['turn'] = $turn;
+         $turn = &$g['turn'];
+
+
+         //$g['cards'] = array("all"=>array(), "drawn"=>array(), "indeck"=>array(), "played"=>array());
+
+
+            $d = mysql_("SELECT Card FROM rsk_turns WHERE GameID='$gid' AND Action='Draw' AND Turn<=$turn ORDER BY Turn ASC");
+         $g['cards']['drawn'] = $d? (is_array($d)? $d : array($d)) : array();
+
+         $g['cards']['indeck'] = array_diff($g['cards']['all'], $g['cards']['drawn']);
+
+
+         // Start parsing turns
+
+         if (!isset($old_turn) || !($old_turn < $turn))
+         {
+            foreach ($g['players'] as $k=>$v)
+            {
+               $g['players'][$k]['cards'] = array();
+               $g['players'][$k]['takes'] = array();
+            }
+
+            $g['onturn'] = 1; //pid of player currently on turn
+            $g['cards']['played'] = array(); //array( array("name"=>"9c", "img"=>"img/9c.png", "fullname"=>"Nine of Clubs") );
+            $g['sethands'] = array(); // array(  array( card1, card2 ), array( card3, card4) )
+         }
+
+
+         function act (&$game, $t) //$t /turn/
+         {
+            if ($t['Action'] == "Draw")
+            {
+               $game['players'][$t['Player']]['cards'][] =
+                  mysql_("SELECT Card as name, Img as img, Fullname as fullname, Power as power, Value as value FROM rsk_cards WHERE Card = '".$t['Card']."' LIMIT 1", MYSQL_ASSOC);
+            }
+
+            if ($t['Action'] == "Play")
+            {
+               //if ($game['onturn'] != $t['Player'])
+               //   continue;
+               //   //ERROR
+
+               $l = count($game['cards']['played']);
+               $game['cards']['played'][$l] =
+                  mysql_("SELECT Card as name, Img as img, Fullname as fullname, Power as power, Value as value FROM rsk_cards WHERE Card = '".$t['Card']."' LIMIT 1", MYSQL_ASSOC);
+               $game['cards']['played'][$l]["owner"] = $t['Player'];
+
+               $game['onturn'] = (($game['onturn']) % count($game['players'])) +1; //increment pid
+
+
+               if (count($game['cards']['played']) >= count($game['players']))
+               {
+                  //Determine winner of hand
+                  unset($lead);
+                  foreach ($game['cards']['played'] as $card)
+                  {
+                     if (!isset($lead))
+                     {
+                        $lead = $card;
+                        continue;
+                     }
+
+                     if (substr($card['name'], -1) != substr($lead['name'], -1))
+                        continue;
+
+
+                     if ($lead['power'] > $card['power'])
+                        continue;
+
+                     $lead = $card;
+                  }
+                  $game['onturn'] = $lead['owner'];
+
+                     foreach ($game['cards']['played'] as $k=>$v)
+                        unset($game['cards']['played'][$k]['owner']);
+
+                  $game['sethands'][] = $game['cards']['played'];
+                  $game['cards']['played'] = array();
+               }
+
+
+               foreach ($game['players'][$t['Player']]['cards'] as $k=>$card)
+               {
+                  if ($card['name'] == $t['Card'])
+                     unset($game['players'][$t['Player']]['cards'][$k]);
+               }
+            }
+
+            if ($t['Action'] == "Take")
+            {
+               $game['players'][$t['Player']]['takes'][] = $game['sethands'];
+               $game['sethands'] = array();
+            }
+         }
+
+            $adstr = (isset($old_turn) && $old_turn < $turn)? " AND Turn > ".$old_turn : "";
+         $turns = mysql_("SELECT Player, Action, Card FROM rsk_turns WHERE GameID='$gid'".$adstr." AND Turn <= $turn ORDER BY Turn ASC", MYSQL_ASSOC|MYSQL_TABLE);
+         if (!$turns) $turns = array();
+
+         foreach ($turns as $t)
+            act($g, $t);
+
+
+         $s = count($g['cards']['indeck']);
+         foreach ($g['players'] as $p)
+            $s += count($p['cards']);
+         $s += count($g['sethands'], 1);
+
+         $g['gameover'] = $s==0;
+
+         //if ($game_over && _last_action!=take) insert take ////
+      }
+
+
+
+      //echo '<a href="'.(isset($_REQUEST['back'])? str_replace("*","&",mysql_real_escape_string($_REQUEST['back'])) : '?').'">Back</a>'."\n";
+      //var_dump($g);
+
+      echo '<script type="text/javascript">window.location.href="'.(isset($_REQUEST['back'])? str_replace("*","&",mysql_real_escape_string($_REQUEST['back'])) : '?').'";</script>'."\n";
       exit;
    }
 }
@@ -1443,122 +1761,29 @@ observe:
       }
 
       $turn = !isset($_REQUEST['turn']) ? 1 : max(1, intval($_REQUEST['turn']));
-      $my_pid = !isset($_REQUEST['perspective']) ? 1 : max(1, intval($_REQUEST['perspective']));
+      $my_pid = !isset($_REQUEST['view']) ? 1 : max(1, intval($_REQUEST['view']));
 
-      // Fill variables
-         $allcards = mysql_("SELECT COUNT(GameID) FROM rsk_turns WHERE GameID='$gid' AND Action='Draw'");
-         $drawncards = mysql_("SELECT COUNT(GameID) FROM rsk_turns WHERE GameID='$gid' AND Action='Draw' AND Turn<=$turn");
-      $cards_inDeck = $allcards - $drawncards; //number of left cards in deck
+      if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid || $_SESSION['game']['turn']!=$turn)
+      {
+         // parse game
+         echo '<script type="text/javascript">window.location.href="?parse='.$gid.'&turn='.$turn.'&back=?observe='.$gid.'*view='.$my_pid.'*turn='.$turn.'";</script>'."\n";
+         exit;
+      }
 
-      $opponents = array(); //array( array("name"=>"zemuru", "cards"=>3) );
-         $players = mysql_("SELECT Player, PID FROM rsk_players WHERE GameID='$gid'", MYSQL_ASSOC|MYSQL_TABLE);
-         foreach ($players as $p)
-            if ($p['PID'] != $my_pid)
-               $opponents[$p['PID']] = array("name"=>$p['Player'], "cards"=>0);
+      $g = &$_SESSION['game'];
 
-         $playerCount = mysql_("SELECT GameID FROM rsk_players WHERE GameID='$gid'", true);
-
-      $player_onTurn = 1; //pid of player currently on turn
-      $cards_played = array(); //array( array("name"=>"9c", "img"=>"img/9c.png", "fullname"=>"Nine of Clubs") );
-      $cards_inHand = array(); //array( array("name"=>"9c", "img"=>"img/9c.png", "fullname"=>"Nine of Clubs") );
-      $cards_lastHand = array();
-      $cards_setHands = 0; //number of hands set
-
-         $turns = mysql_("SELECT Player, Action, Card FROM rsk_turns WHERE GameID='$gid' AND Turn<=$turn ORDER BY Turn ASC", MYSQL_ASSOC|MYSQL_TABLE);
-
-         foreach ($turns as $t)
-         {
-            if ($t['Action'] == "Draw")
-            {
-               if ($t['Player'] == $my_pid)
-                  $cards_inHand[] = mysql_("SELECT Card as name, Img as img, Fullname as fullname FROM rsk_cards WHERE Card = '".$t['Card']."' LIMIT 1", MYSQL_ASSOC);
-               else
-                  $opponents[$t['Player']]['cards']++;
-            }
-
-            if ($t['Action'] == "Play")
-            {
-               //if ($player_onTurn != $t['Player'])
-               //   continue;
-               //   //ERROR
-
-                  $l = count($cards_played);
-               $cards_played[$l] = mysql_("SELECT Card as name, Power as power, Img as img, Fullname as fullname FROM rsk_cards WHERE Card = '".$t['Card']."' LIMIT 1", MYSQL_ASSOC);
-               $cards_played[$l]["owner"] = $t['Player'];
-               $player_onTurn = (($player_onTurn)%$playerCount) +1; //increment pid
-
-               if (count($cards_played) >= $playerCount)
-               {
-                  //Determine winner of hand
-                  unset($lead);
-                  foreach ($cards_played as $k=>$card)
-                  {
-                     if (!isset($lead))
-                     {
-                        $lead = $card;
-                        continue;
-                     }
-
-                     if (substr($card['name'], -1) != substr($lead['name'], -1))
-                        continue;
-
-
-                     if ($lead['power'] > $card['power'])
-                        continue;
-
-                     $lead = $card;
-                  }
-                  $player_onTurn = $lead['owner'];
-
-                  $cards_setHands++;
-                  $cards_lastHand = $cards_played;
-                  $cards_played = array();
-               }
-
-               if ($t['Player'] == $my_pid)
-               {
-                  foreach ($cards_inHand as $k=>$v)
-                     if ($v['name'] == $t['Card'])
-                        unset($cards_inHand[$k]);
-               }
-               else
-                  $opponents[$t['Player']]['cards']--;
-            }
-
-            if ($t['Action'] == "Take")
-            {
-               $cards_lastHand = array();
-               $cards_setHands = 0;
-            }
-         }
-
-         $s = count($cards_inHand);
-         foreach ($opponents as $p)
-            $s += $p['cards'];
-         $s += $cards_inDeck;
-      $game_over = $s==0;
-
-      //if ($game_over && _last_action!=take) insert take ////
-
-
-      $player_onTurn_name = mysql_("SELECT Player FROM rsk_players WHERE GameID='$gid' AND PID=$player_onTurn"); //name of player currently on turn
-
-
-         $q = mysql_("SELECT turnDraw FROM rsk_games WHERE GID='$gid'", MYSQL_ASSOC);
-         $rule_turnDraw = $q==1;
-
-      $can_play = ($player_onTurn==$my_pid);
+      $can_play = ($g['onturn']==$my_pid);
          // true if current player is on turn
-      $can_take = ($player_onTurn==$my_pid) && ($cards_setHands>0) && (count($cards_played)==0);
+      $can_take = ($g['onturn']==$my_pid) && (count($g['sethands'])>0) && (count($g['cards']['played'])==0);
          // true if current player is: on turn, there are set cards, there are no played cards
-      $can_draw = ($player_onTurn==$my_pid) && (count($cards_played)==0) && $rule_turnDraw;
+      $can_draw = ($g['onturn']==$my_pid) && (count($g['cards']['played'])==0) && $g['rules']['turnDraw'];
          // true if current player is: on turn, there are no played cards, rule:turnDraw is enabled
       // Done with the variables
 
 
       echo '<html>'."\n";
       echo '<head>'."\n";
-      echo '   <title>Risk Jack - In Game</title>'."\n";
+      echo '   <title>Risk Jack - Observe Game</title>'."\n";
       echo '   <script type="text/javascript" src="?js&call&poll&clean"></script>'."\n";
       echo '   <link rel="stylesheet" type="text/css" href="?css&ingame" />'."\n";
       echo '</head>'."\n";
@@ -1567,95 +1792,74 @@ observe:
       echo "\n";
 
 
-      if ($game_over)
+      if ($g['gameover'])
       {
-         $players = array();
+         echo '   <div class="scoreboard">'."\n";
 
-            $opponents[$my_pid] = array("name"=>$_SESSION['user']);
-
-         foreach ($opponents as $pid=>$player)
+         foreach ($g['players'] as $player)
          {
-            $players[$pid] = array("name"=>$player['name'], "hands"=>array());
-
-            $takes = mysql_("SELECT Turn FROM rsk_turns WHERE GameID='$gid' AND Player=$pid AND Action='Take' ORDER BY Turn ASC", MYSQL_ASSOC|MYSQL_TABLE);
-
-            if (count($takes) == 0)
-               continue;
-
-            $prev = 0;
-            foreach ($takes as $t)
-            {
-               $players[$pid]['hands'][] = mysql_(
-                  "SELECT ".
-                   "c.Card as name, ".
-                   "c.Img as img, ".
-                   "c.Fullname as fullname, ".
-                   "c.Value as value ".
-                  "FROM ".
-                   "rsk_cards as c, ".
-                   "rsk_turns as t ".
-                  "WHERE ".
-                   "c.Card = t.Card AND ".
-                   "t.GameID='$gid' AND ".
-                   "t.Action='Play' AND ".
-                   "t.Turn > ".max(0, mysql_(
-                     "SELECT ".
-                      "Turn ".
-                     "FROM ".
-                      "rsk_turns ".
-                     "WHERE ".
-                      "GameID='$gid' AND ".
-                      "Action='Take' AND ".
-                      "Turn <".$t['Turn']." ".
-                     "ORDER BY ".
-                      "Turn ".
-                      "DESC ".
-                     "LIMIT 1")).
-                   " AND ".
-                   "t.Turn < ".$t['Turn']." ".
-                  "ORDER BY ".
-                   "t.Turn ASC",
-               MYSQL_ASSOC);
-            }
-         }
-
-         ksort($players);
-
-         //----------////
-
-         foreach ($players as $p)
-         {
-            echo '<div class="player" style="margin-bottom: 1em; border-bottom: 2px solid gray;">'."\n";
-            echo '   <div class="name"><b>'.$p['name'].'</b></div>'."\n";
+            echo '      <div class="player score">'."\n";
+            echo '         <div class="name">'.$player['name'].'</div>'."\n";
             echo "\n";
 
-            $points = 0;
+            $total_points = 0;
+            $buffer = '';
 
-            echo '   <div class="hands">'."\n";
-            foreach ($p['hands'] as $hand)
+            $buffer .= '         <div class="hands">'."\n";
+            $buffer .= "\n";
+
+            foreach ($player['takes'] as $pile)
             {
-               $points_hand = 0;
+               $hand_points  = 0;
+               $card_points  = 0;
+               $bonus_points = count($pile)-1;
 
-               echo '      <div class="hand" style="margin-bottom: 0.5em;">'."\n";
-               foreach ($hand as $card)
+               $buffer .= '            <div class="hand">'."\n";
+               $buffer .= "\n";
+
+               foreach ($pile as $hand)
                {
-                  echo '      <div class="card">'."\n";
-                  echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
-                  echo '         <div class="name">'.$card['fullname'].'</div>'."\n";
-                  echo '      </div>'."\n";
-                  $points_hand += $card['value'];
-               }
-               $points_hand += (count($hand)/$playerCount)-1;
-               echo '         <div class="points">'.$points_hand.'</div>'."\n";
-               echo '      </div>'."\n";
 
-               $points += $points_hand;
+                  foreach ($hand as $card)
+                  {
+                     $card_points += $card['value'];
+
+                     $buffer .= '               <div class="card">'."\n";
+                     $buffer .= '                  <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
+                     $buffer .= '                  <div class="name">'.$card['fullname'].'</div>'."\n";
+                     $buffer .= '               </div>'."\n";
+                  }
+
+               }
+               $hand_points = $card_points + $bonus_points;
+
+               $buffer .= '              <div class="score">'."\n";
+               $buffer .= '                  <div class="card points">'.$card_points.'</div>'."\n";
+               $buffer .= '                  <div class="bonus points">'.$bonus_points.'</div>'."\n";
+               $buffer .= '                  <div class="hand points">'.$hand_points.'</div>'."\n";
+               $buffer .= '               </div>'."\n";
+
+               $buffer .= "\n";
+               $buffer .= '            </div>'."\n";
+
+               $total_points += $hand_points;
             }
-            echo '   </div>'."\n";
-            echo '   <div class="points" style="float:right;">'.$points.'</div>'."\n";
-            echo '</div>'."\n";
+
+            $buffer .= '         </div>'."\n";
+
+            echo '         <div class="total points">'.$total_points.'</div>'."\n";
+
+            echo $buffer;
+
+            echo '      </div>'."\n";
          }
 
+         echo '      <a href="?" class="back">Exit</a>'."\n";
+         ////
+         //echo '      <a href="?" class="back fixed">Exit</a>'."\n";
+         //echo '<script type="text/javascript">onscroll</script>'."\n";
+
+         echo '   </div>'."\n";
 
          echo "\n";
          echo '</body>'."\n";
@@ -1675,7 +1879,7 @@ observe:
       echo '   </div>'."\n";
       echo "\n";
       echo '   <div class="description">'."\n";
-      echo '      <span class="number">'.$cards_inDeck.'</span>'."\n";
+      echo '      <span class="number">'.count($g['cards']['indeck']).'</span>'."\n";
       echo '      <div class="clarification">in deck</div>'."\n";
       echo '   </div>'."\n";
       echo '</div>'."\n";
@@ -1684,7 +1888,7 @@ observe:
       // Notice Section
 
       echo '<div class="turn notice">'."\n";
-      echo '   '.($player_onTurn == $my_pid ? "Your turn" : $player_onTurn_name."'s turn")."\n";
+      echo '   '.($g['onturn'] == $my_pid ? "Your turn" : $g['players'][$g['onturn']]['name']."'s turn")."\n";
       echo '</div>'."\n";
 
 
@@ -1695,7 +1899,7 @@ observe:
       echo "\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($cards_played as $card)
+      foreach ($g['cards']['played'] as $card)
       {
          echo '      <div class="card">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
@@ -1712,7 +1916,10 @@ observe:
       echo '<div class="set hand">'."\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($cards_lastHand as $card)
+
+      $lastHand = end($g['sethands']);
+      if (!$lastHand) $lastHand = array();
+      foreach ($lastHand as $card)
       {
          echo '      <div class="last-hand card">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
@@ -1720,25 +1927,26 @@ observe:
          echo '      </div>'."\n";
       }
 
-      for ($i=1; $i < $cards_setHands; $i++)
+      for ($i=1; $i < count($g['sethands']); $i++)
       {
          echo '      <div class="card">'."\n";
          echo '         <img src="img/back.png" alt="Back of Card" title="Back of Card" />'."\n";
          echo '         <div class="name">Back of Card</div>'."\n";
          echo '      </div>'."\n";
       }
+
       echo "\n";
       echo '   </div>'."\n";
       echo "\n";
       echo '   <div class="description">'."\n";
-      echo '      <span class="number">'.$cards_setHands.'</span>'."\n";
-      echo '      <div class="clarification">set hand'.($cards_setHands!=1 ? "s" : "&nbsp;").'</div>'."\n";
+      echo '      <span class="number">'.count($g['sethands']).'</span>'."\n";
+      echo '      <div class="clarification">set hand'.(count($g['sethands'])!=1 ? "s" : "&nbsp;").'</div>'."\n";
       echo '   </div>'."\n";
       echo "\n";
       if ($can_take)
       {
          echo '   <div class="action">'."\n";
-         echo '      <a href="?takecards">Take</a>'."\n";
+         echo '      <a href="#takecards">Take</a>'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -1751,7 +1959,7 @@ observe:
       echo "\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($cards_inHand as $card)
+      foreach ($g['players'][$my_pid]['cards'] as $card)
       {
          echo '      <div class="card" onclick="play(\''.$card['name'].'\');">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
@@ -1764,7 +1972,7 @@ observe:
       if ($can_draw)
       {
          echo '   <div class="action">'."\n";
-         echo '      <a href="?draw">Draw</a>'."\n";
+         echo '      <a href="#draw">Draw</a>'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -1773,12 +1981,15 @@ observe:
       // Opponents Section
 
       echo '<div class="opponents">'."\n";
-      foreach ($opponents as $player)
+      foreach ($g['players'] as $player)
       {
+         if ($player['pid'] == $my_pid)
+            continue;
+
          echo '   <div class="player">'."\n";
          echo '      <div class="hand">'."\n";
          echo "\n";
-         for ($i=0; $i < $player['cards']; $i++)
+         for ($j=0; $j < count($player['cards']); $j++)
          {
             echo '         <div class="card">'."\n";
             echo '            <img src="img/back.png" alt="Back of Card" title="Back of Card" />'."\n";
@@ -1828,113 +2039,26 @@ ingame:
 {
    if (isset($_SESSION['user']) && mysql_("SELECT GameID FROM rsk_turns WHERE GameID=(SELECT GameID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1)", true) > 0)
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1", MYSQL_ASSOC);
-      $gid = $g['GameID'];
-      $my_pid = $g['PID'];
+      $q = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1", MYSQL_ASSOC);
+      $gid = $q['GameID'];
+      $my_pid = $q['PID'];
 
+      $turn = mysql_("SELECT Turn FROM rsk_turns WHERE GameID=$gid", true);
 
-      // Fill variables
-         $allcards = mysql_("SELECT COUNT(GameID) FROM rsk_decks WHERE GameID='$gid'");
-         $drawncards = mysql_("SELECT COUNT(GameID) FROM rsk_turns WHERE GameID='$gid' AND Action='Draw'");
-      $cards_inDeck = $allcards - $drawncards; //number of left cards in deck
+      if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid || $_SESSION['game']['turn']!=$turn)
+      {
+         // parse game
+         echo '<script type="text/javascript">window.location.href="?parse='.$gid.'&turn='.$turn.'&back=?";</script>'."\n";
+         exit;
+      }
 
-      $opponents = array(); //array( array("name"=>"zemuru", "cards"=>3) );
-         $players = mysql_("SELECT Player, PID FROM rsk_players WHERE GameID='$gid' AND Finished='0'", MYSQL_ASSOC|MYSQL_TABLE);
-         foreach ($players as $p)
-            if ($p['PID'] != $my_pid)
-               $opponents[$p['PID']] = array("name"=>$p['Player'], "cards"=>0);
+      $g = &$_SESSION['game'];
 
-         $playerCount = mysql_("SELECT GameID FROM rsk_players WHERE GameID='$gid'", true);
-
-      $player_onTurn = 1; //pid of player currently on turn
-      $cards_played = array(); //array( array("name"=>"9c", "img"=>"img/9c.png", "fullname"=>"Nine of Clubs") );
-      $cards_inHand = array(); //array( array("name"=>"9c", "img"=>"img/9c.png", "fullname"=>"Nine of Clubs") );
-      $cards_lastHand = array();
-      $cards_setHands = 0; //number of hands set
-
-         $turns = mysql_("SELECT Player, Action, Card FROM rsk_turns WHERE GameID='$gid' ORDER BY Turn ASC", MYSQL_ASSOC|MYSQL_TABLE);
-
-         $d = 0; //to-draw index
-
-         foreach ($turns as $t)
-         {
-            if ($t['Action'] == "Draw")
-            {
-               if ($t['Player'] == $my_pid)
-                  $cards_inHand[] = mysql_("SELECT c.Card as name, c.Img as img, c.Fullname as fullname FROM rsk_cards as c, rsk_decks as d WHERE c.Card = d.Card AND d.Position = $d LIMIT 1", MYSQL_ASSOC);
-               else
-                  $opponents[$t['Player']]['cards'] ++;
-
-               $d++;
-            }
-
-            if ($t['Action'] == "Play")
-            {
-               //if ($player_onTurn != $t['Player'])
-               //   continue;
-               //   //ERROR
-
-                  $l = count($cards_played);
-               $cards_played[$l] = mysql_("SELECT Card as name, Power as power, Img as img, Fullname as fullname FROM rsk_cards WHERE Card = '".$t['Card']."' LIMIT 1", MYSQL_ASSOC);
-               $cards_played[$l]["owner"] = $t['Player'];
-               $player_onTurn = (($player_onTurn)%$playerCount) +1; //increment pid
-
-               if (count($cards_played) >= $playerCount)
-               {
-                  //Determine winner of hand
-                  unset($lead);
-                  foreach ($cards_played as $k=>$card)
-                  {
-                     if (!isset($lead))
-                     {
-                        $lead = $card;
-                        continue;
-                     }
-
-                     if (substr($card['name'], -1) != substr($lead['name'], -1))
-                        continue;
-
-
-                     if ($lead['power'] > $card['power'])
-                        continue;
-
-                     $lead = $card;
-                  }
-                  $player_onTurn = $lead['owner'];
-
-                  $cards_setHands++;
-                  $cards_lastHand = $cards_played;
-                  $cards_played = array();
-               }
-
-               if ($t['Player'] == $my_pid)
-               {
-                  foreach ($cards_inHand as $k=>$v)
-                     if ($v['name'] == $t['Card'])
-                        unset($cards_inHand[$k]);
-               }
-               else
-                  $opponents[$t['Player']]['cards']--;
-            }
-
-            if ($t['Action'] == "Take")
-            {
-               $cards_lastHand = array();
-               $cards_setHands = 0;
-            }
-         }
-
-      $player_onTurn_name = mysql_("SELECT Player FROM rsk_players WHERE GameID='$gid' AND PID=$player_onTurn"); //name of player currently on turn
-
-
-         $q = mysql_("SELECT turnDraw FROM rsk_games WHERE GID='$gid'", MYSQL_ASSOC);
-         $rule_turnDraw = $q==1;
-
-      $can_play = ($player_onTurn==$my_pid);
+      $can_play = ($g['onturn']==$my_pid);
          // true if current player is on turn
-      $can_take = ($player_onTurn==$my_pid) && ($cards_setHands>0) && (count($cards_played)==0);
+      $can_take = ($g['onturn']==$my_pid) && (count($g['sethands'])>0) && (count($g['cards']['played'])==0);
          // true if current player is: on turn, there are set cards, there are no played cards
-      $can_draw = ($player_onTurn==$my_pid) && (count($cards_played)==0) && $rule_turnDraw;
+      $can_draw = ($g['onturn']==$my_pid) && (count($g['cards']['played'])==0) && $g['rules']['turnDraw'];
          // true if current player is: on turn, there are no played cards, rule:turnDraw is enabled
       // Done with the variables
 
@@ -1950,6 +2074,14 @@ ingame:
       echo "\n";
 
 
+      if ($g['gameover'])
+      {
+         $_SESSION['dealt'] = true;
+         echo '<script type="text/javascript">window.location.href="?finalize"</script>'."\n";
+         exit;
+      }
+
+
       // Deck Section
 
       echo '<div class="deck">'."\n";
@@ -1961,7 +2093,7 @@ ingame:
       echo '   </div>'."\n";
       echo "\n";
       echo '   <div class="description">'."\n";
-      echo '      <span class="number">'.$cards_inDeck.'</span>'."\n";
+      echo '      <span class="number">'.count($g['cards']['indeck']).'</span>'."\n";
       echo '      <div class="clarification">in deck</div>'."\n";
       echo '   </div>'."\n";
       echo '</div>'."\n";
@@ -1970,7 +2102,7 @@ ingame:
       // Notice Section
 
       echo '<div class="turn notice">'."\n";
-      echo '   '.($player_onTurn == $my_pid ? "Your turn" : $player_onTurn_name."'s turn")."\n";
+      echo '   '.($g['onturn'] == $my_pid ? "Your turn" : $g['players'][$g['onturn']]['name']."'s turn")."\n";
       echo '</div>'."\n";
 
 
@@ -1981,7 +2113,7 @@ ingame:
       echo "\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($cards_played as $card)
+      foreach ($g['cards']['played'] as $card)
       {
          echo '      <div class="card">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
@@ -1998,7 +2130,10 @@ ingame:
       echo '<div class="set hand">'."\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($cards_lastHand as $card)
+
+      $lastHand = end($g['sethands']);
+      if (!$lastHand) $lastHand = array();
+      foreach ($lastHand as $card)
       {
          echo '      <div class="last-hand card">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
@@ -2006,25 +2141,26 @@ ingame:
          echo '      </div>'."\n";
       }
 
-      for ($i=1; $i < $cards_setHands; $i++)
+      for ($i=1; $i < count($g['sethands']); $i++)
       {
          echo '      <div class="card">'."\n";
          echo '         <img src="img/back.png" alt="Back of Card" title="Back of Card" />'."\n";
          echo '         <div class="name">Back of Card</div>'."\n";
          echo '      </div>'."\n";
       }
+
       echo "\n";
       echo '   </div>'."\n";
       echo "\n";
       echo '   <div class="description">'."\n";
-      echo '      <span class="number">'.$cards_setHands.'</span>'."\n";
-      echo '      <div class="clarification">set hand'.($cards_setHands!=1 ? "s" : "&nbsp;").'</div>'."\n";
+      echo '      <span class="number">'.count($g['sethands']).'</span>'."\n";
+      echo '      <div class="clarification">set hand'.(count($g['sethands'])!=1 ? "s" : "&nbsp;").'</div>'."\n";
       echo '   </div>'."\n";
       echo "\n";
       if ($can_take)
       {
-         echo '   <div class="action" onclick="window.location.href=\'?takecards\';">'."\n";
-         echo '      Take'."\n";
+         echo '   <div class="action">'."\n";
+         echo '      <a href="?takecards">Take</a>'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -2037,7 +2173,7 @@ ingame:
       echo "\n";
       echo '   <div class="cards">'."\n";
       echo "\n";
-      foreach ($cards_inHand as $card)
+      foreach ($g['players'][$my_pid]['cards'] as $card)
       {
          echo '      <div class="card" onclick="play(\''.$card['name'].'\');">'."\n";
          echo '         <img src="'.$card['img'].'" alt="'.$card['fullname'].'" title="'.$card['fullname'].'" />'."\n";
@@ -2049,8 +2185,8 @@ ingame:
       echo "\n";
       if ($can_draw)
       {
-         echo '   <div class="action" onclick="window.location.href=\'?draw\';">'."\n";
-         echo '      Draw'."\n";
+         echo '   <div class="action">'."\n";
+         echo '      <a href="?draw">Draw</a>'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -2059,12 +2195,15 @@ ingame:
       // Opponents Section
 
       echo '<div class="opponents">'."\n";
-      foreach ($opponents as $player)
+      foreach ($g['players'] as $player)
       {
+         if ($player['pid'] == $my_pid)
+            continue;
+
          echo '   <div class="player">'."\n";
          echo '      <div class="hand">'."\n";
          echo "\n";
-         for ($i=0; $i < $player['cards']; $i++)
+         for ($j=0; $j < count($player['cards']); $j++)
          {
             echo '         <div class="card">'."\n";
             echo '            <img src="img/back.png" alt="Back of Card" title="Back of Card" />'."\n";
@@ -2088,7 +2227,7 @@ ingame:
       echo '<script type="text/javascript">'."\n";
       echo 'function play (card) {'."\n";
 
-      if ($player_onTurn == $my_pid)
+      if ($g['onturn'] == $my_pid)
          echo '   window.location.href = "?play="+card;'."\n";
       else
          echo '   return true;'."\n";
@@ -2099,7 +2238,7 @@ ingame:
 
 
       // polling
-      $pollfor = 'game:'.$g['GameID'];
+      $pollfor = 'game:'.$g['gid'];
       echo "\n";
       echo '<script type="text/javascript">'."\n";
       echo '   poll("'.$pollfor.'");'."\n";
@@ -2511,12 +2650,25 @@ login:
    echo '            document.getElementById("inp:"+r+"-user").value = this.value;'."\n";
    echo '            document.getElementById("inp:"+r+"-pwd").focus();'."\n";
    echo '         }'."\n";
+   echo "\n";
+   if (isset($_COOKIE['remember']))
+   {
+      echo '         inp_usr.value = "'.$_COOKIE['remember'].'";'."\n";
+      echo '         window.onload = function () {inp_usr.onchange();}'."\n";
+   }
+   echo '         document.getElementById("inp:remusr").onchange = function () {'."\n";
+   echo '            document.getElementById("inp:s2-remusr").value = this.value;'."\n";
+   echo '         }'."\n";
    echo '      </script>'."\n";
    echo '   </div>'."\n";
    echo '   <div class="stage" id="s2">'."\n";
    echo '      <form action="?login&s2" method="POST">'."\n";
    echo '         <input type="hidden" name="username" id="inp:s2-user" value="" />'."\n";
-   echo '         <label>'."\n";
+   echo '         <label for="inp:s2-pwd">'."\n";
+   echo "\n";
+   echo '               <input type="checkbox" name="remusr" class="remember" title="Remember username"'.(isset($_COOKIE['remember'])? ' checked' : '').' tabindex=4 style="position: relative; top: -5.7em;" />'."\n";
+   echo '               <input type="checkbox" name="stayin" class="remember" title="Stay logged in" tabindex=5 />'."\n";
+   echo "\n";
    echo '            Password:<br />'."\n";
    echo '            <input type="password" name="password" id="inp:s2-pwd" placeholder="Password" tabindex=2 />'."\n";
    echo '         </label>'."\n";
