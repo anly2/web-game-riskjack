@@ -358,6 +358,34 @@ EOT;
    font-style: italic;
    font-size: 1.05em;
 }
+.pre-game.main .players .slots .slot .option {
+   float: right;
+   margin: 0.25em 0.25em -0.25em;
+}
+.pre-game.main .players .slots .slot .option.promote {
+   display: inline-block;
+   cursor: pointer;
+   overflow: hidden;
+   width: 0em;
+   height: 0em;
+   border-style: solid;
+   border-color: transparent;
+   border-bottom: 0.75em solid #6496C8;
+   border-left-width: 0.5em;
+   border-right-width: 0.5em;
+}
+.pre-game.main .players .slots .slot .option.kick {
+   display: inline-block;
+   cursor: pointer;
+   overflow: hidden;
+   width: 0em;
+   height: 0em;
+   border-style: solid;
+   border-color: transparent;
+   border-left: 0.75em solid #6496C8;
+   border-top-width: 0.5em;
+   border-bottom-width: 0.5em;
+}
 .pre-game.main .players .slots .slot .position {
    margin-right: 1.5em;
    margin-left: 0.5em;
@@ -714,18 +742,24 @@ js:
             exit;
          }
 
-         echo 'function poll (pollfor, state) {'."\n";
-         echo '   if (!pollfor) return false;'."\n";
+         echo 'lastpollcall  = false;'."\n";
+         echo 'lastpollstate = false;'."\n";
          echo "\n";
-         echo '   call("?poll="+pollfor+(!state? "" : "&state="+state),'."\n";
-         echo '      function(t){//alert(t);'."\n";
-         echo '         if(t=="1")'."\n";
-         echo '            window.location.href="?";'."\n";
-         echo '         else'."\n";
-         echo '            poll(pollfor, state);'."\n";
-         echo '      }'."\n";
-         echo '   );'."\n";
+         echo 'function poll (pollfor, state) {'."\n";
+         echo '   if (!pollfor && !lastpollcall) return false;'."\n";
+         echo '   if (!pollfor){ pollfor = lastpollcall; state = lastpollstate; }'."\n";
+         echo "\n";
+         echo '   lastpollcall = pollfor; lastpollstate = state;'."\n";
+         echo "\n";
+         echo '   call("?poll="+pollfor+(!state? "" : "&state="+state), pollanswer);'."\n";
          echo '}'."\n";
+         echo "\n";
+         echo '   function pollanswer (t) {'."\n";
+         echo '      if(t=="1")'."\n";
+         echo '         window.location.href="?";'."\n";
+         echo '      else'."\n";
+         echo '         poll();'."\n";
+         echo '   }'."\n";
       }
 
       if (isset($_REQUEST['clean']) || count($_REQUEST)==1)
@@ -883,6 +917,72 @@ EOT;
 }
 EOT;
       }
+
+      if (isset($_REQUEST['loadingOverhaul']))
+      {
+         echo <<<EOT
+pollanswer = function (t, ao_link) {
+   if (t == "-1")
+   {
+      window.location.href="?lost";
+      return true;
+   }
+
+   if (t!="1")
+   {
+      return poll();
+   }
+
+   if (!ao_link)
+      ao_link = "?";
+
+   var link = "";
+
+   var r = call(ao_link, true); link = ao_link;
+   var redir_link = false;
+
+   while (r.indexOf("<body>") == -1)
+   {
+      r = r.replace(/<\/?script.*?>/gi, "");
+      r = r.replace(/window\.location\.href/g, "redir_link");
+      eval( r );
+
+      if (!redir_link)
+      {
+         window.location.reload();
+         return true;
+      }
+
+      r = call(redir_link, true); link = redir_link;
+   }
+
+   window.location.href = link;
+   return true;
+}
+
+var anchors = document.getElementsByTagName("a");
+
+var i;
+for (i=0; i<anchors.length; i++)
+{
+   var hrf = anchors[i].getAttribute('href');
+   var _oncl = anchors[i].getAttribute('onclick');
+   anchors[i].onclick = function () {
+      pollanswer("1", hrf);
+      eval(_oncl);
+   }
+   anchors[i].setAttribute('href', "");
+}
+
+if (!play())
+{
+   play = function (card) {
+      pollanswer("1", "?play="+card);
+   }
+}
+EOT;
+      }
+
    exit;
    }
 }
@@ -1072,9 +1172,9 @@ queries:
       else
       {
          $gid = 1;
-         $gs = mysql_("SELECT GID FROM rsk_games ORDER BY GID ASC", MYSQL_ASSOC);
+         $gs = mysql_("SELECT GID FROM rsk_games ORDER BY GID ASC", MYSQL_TABLE);
          foreach ($gs as $k=>$v)
-            if ($k+1 != $v['GID'])
+            if ($k+1 != $v)
             {
                $gid = $k+1;
                break;
@@ -1083,8 +1183,8 @@ queries:
 
       $name = mysql_real_escape_string($_SESSION['user'] . "'s game");
 
-      mysql_("INSERT INTO rsk_games (GID, Name) VALUES ('$gid', '$name')") or die(mysql_error());
-      mysql_("INSERT INTO rsk_players (Player, GameID, PID) VALUES ('".$_SESSION['user']."', '$gid', 1)") or die(mysql_error());
+      mysql_("INSERT INTO rsk_games (GID, Name, Host) VALUES ($gid, '$name', '".$_SESSION['user']."')") or die(mysql_error());
+      mysql_("INSERT INTO rsk_players (Player, GameID, PID) VALUES ('".$_SESSION['user']."', $gid, 1)") or die(mysql_error());
 
       mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1, ".status_margin.") WHERE `Key`='lobby'");
       mysql_("INSERT INTO rsk_status (`Key`, `Value`) VALUES ('game:$gid', 0)");
@@ -1096,15 +1196,15 @@ queries:
    {
       $gid = intval($_REQUEST['join']);
 
-      $slots  = intval(mysql_("SELECT PlayerCount FROM rsk_games WHERE GID='$gid'"));
-      $joined = mysql_("SELECT GameID FROM rsk_players WHERE GameID='$gid'", true);
+      $slots  = intval(mysql_("SELECT PlayerCount FROM rsk_games WHERE GID=$gid"));
+      $joined = mysql_("SELECT GameID FROM rsk_players WHERE GameID=$gid", true);
 
       if ($slots > $joined)
       {
-         $q = mysql_("SELECT PID FROM rsk_players WHERE GameID='$gid' ORDER BY PID DESC LIMIT 1", MYSQL_ASSOC);
+         $q = mysql_("SELECT PID FROM rsk_players WHERE GameID=$gid ORDER BY PID DESC LIMIT 1", MYSQL_ASSOC);
          $pid = intval($q['PID'])+1;
 
-         mysql_("INSERT INTO rsk_players (Player, GameID, PID) VALUES ('".$_SESSION['user']."', '$gid', '$pid')") or die(mysql_error());
+         mysql_("INSERT INTO rsk_players (Player, GameID, PID) VALUES ('".$_SESSION['user']."', $gid, $pid)") or die(mysql_error());
 
          mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:$gid'");
       }
@@ -1114,8 +1214,8 @@ queries:
    }
    if (isset($_REQUEST['update']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1", MYSQL_ASSOC);
-      if ($g['PID'] != 1)
+      $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
+      if ($_SESSION['user'] != $g['host'])
       {
          echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
          exit;
@@ -1133,8 +1233,8 @@ queries:
 
       if ($setstring != "")
       {
-         mysql_("UPDATE rsk_games SET $setstring WHERE GID='".$g['GameID']."'");
-         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+         mysql_("UPDATE rsk_games SET $setstring WHERE GID=".$g['gid']);
+         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
       }
 
       if (isset($_REQUEST['pid'], $_REQUEST['chg']))
@@ -1148,35 +1248,65 @@ queries:
             exit;
          }
 
-         mysql_("UPDATE rsk_players SET PID=0 WHERE GameID='".$g['GameID']."' AND PID = ".$pid) or die(mysql_error());
+         mysql_("UPDATE rsk_players SET PID=0 WHERE GameID=".$g['gid']." AND PID = ".$pid) or die(mysql_error());
 
          if ($chg < 0)
-            mysql_("UPDATE rsk_players SET PID=PID+1 WHERE GameID='".$g['GameID']."' AND PID >= ".($pid+$chg)." AND PID < ".$pid);
+            mysql_("UPDATE rsk_players SET PID=PID+1 WHERE GameID=".$g['gid']." AND PID >= ".($pid+$chg)." AND PID < ".$pid);
          else
-            mysql_("UPDATE rsk_players SET PID=PID-1 WHERE GameID='".$g['GameID']."' AND PID > ".$pid." AND PID <= ".($pid+$chg));
+            mysql_("UPDATE rsk_players SET PID=PID-1 WHERE GameID=".$g['gid']." AND PID > ".$pid." AND PID <= ".($pid+$chg));
 
-         mysql_("UPDATE rsk_players SET PID=".($pid+$chg)." WHERE GameID='".$g['GameID']."' AND PID = 0");
-         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+         mysql_("UPDATE rsk_players SET PID=".($pid+$chg)." WHERE GameID=".$g['gid']." AND PID = 0");
+         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
       }
+
+      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+      exit;
+   }
+   if (isset($_REQUEST['promote'])){
+      $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
+
+      if ($_SESSION['user'] != $g['host'])
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
+
+      $promotee = mysql_real_escape_string($_REQUEST['promote']);
+
+      if (mysql_("SELECT 1 FROM rsk_players WHERE GameID=".$g['gid']." AND Player='".$promotee."' AND Finished=0", true) <= 0)
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
+
+      if ($promotee == $g['host'])
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
+
+      mysql_("UPDATE rsk_games SET Host='$promotee' WHERE GID=".$g['gid']);
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
 
       echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
       exit;
    }
    if (isset($_REQUEST['leavegame']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1", MYSQL_ASSOC);
-      mysql_("DELETE FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0'");
-      mysql_("UPDATE rsk_players SET PID=PID-1 WHERE GameID='".$g['GameID']."' AND PID>".$g['PID']);
+      $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid FROM rsk_players as p WHERE p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
 
-      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+      mysql_("DELETE FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0");
+      mysql_("UPDATE rsk_players SET PID=PID-1 WHERE GameID=".$g['gid']." AND PID>".$g['my_pid']);
 
-      $c = mysql_("SELECT GameID FROM rsk_players WHERE GameID='".$g['GameID']."'", true);
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
+
+      $c = mysql_("SELECT 1 FROM rsk_players WHERE GameID=".$g['gid'], true);
       if ($c == 0)
       {
-         mysql_("DELETE FROM rsk_games WHERE GID='".$g['GameID']."'");
+         mysql_("DELETE FROM rsk_games WHERE GID=".$g['gid']);
 
          mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='lobby'");
-         mysql_("DELETE FROM rsk_status WHERE `Key`='game:".$g['GameID']."'");
+         mysql_("DELETE FROM rsk_status WHERE `Key`='game:".$g['gid']."'");
       }
 
       echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
@@ -1184,12 +1314,16 @@ queries:
    }
    if (isset($_REQUEST['startgame']))
    {
-      $g = mysql_("SELECT GameID, PID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1", MYSQL_ASSOC);
+      $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host, g.PlayerCount as playerCount, g.startingHand as startingHand FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
 
-      $playerCount = mysql_("SELECT PlayerCount FROM rsk_games WHERE GID='".$g['GameID']."' LIMIT 1");
-      $playersIn = mysql_("SELECT GameID FROM rsk_players WHERE GameID='".$g['GameID']."' AND Finished='0'", true);
+      if ($_SESSION['user'] != $g['host'])
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
 
-      if ($playerCount != $playersIn)
+      $playersIn = mysql_("SELECT 1 FROM rsk_players WHERE GameID=".$g['gid']." AND Finished=0", true);
+      if ($g['playerCount'] != $playersIn)
       {
          echo "Not enough players<br />\n";
          echo '<a href="?">Back</a>'."\n";
@@ -1197,50 +1331,58 @@ queries:
          exit;
       }
 
-      if ($g['PID'] == '1')
+
+      //Prepare Deck
+      $allcards = mysql_("SELECT Card FROM rsk_cards", MYSQL_NUM);
+
+      //    suffle deck
+      shuffle($allcards);
+
+      //    apply deck
+      $valstring = "";
+      foreach ($allcards as $p=>$c)
       {
-         //Prepare Deck
-         $allcards = mysql_("SELECT Card FROM rsk_cards", MYSQL_NUM);
+         if ($valstring!="")
+            $valstring .= ", ";
 
-         //    suffle deck
-         shuffle($allcards);
-
-         //    apply deck
-         foreach ($allcards as $p=>$c)
-            mysql_("INSERT INTO rsk_decks (GameID, Position, Card) VALUES (".$g['GameID'].", $p, '$c')");
-
-
-         //Deal Starting Hand
-         $details = mysql_("SELECT PlayerCount, startingHand FROM rsk_games WHERE GID='".$g['GameID']."' LIMIT 1", MYSQL_ASSOC);
-
-         $dealt = 0;
-         $p = 0;
-
-         while ($dealt < $details['startingHand'] * $details['PlayerCount'])
-         {
-            $pc = mysql_("SELECT Player FROM rsk_turns WHERE GameID='".$g['GameID']."' AND Player='".($p+1)."'", true);
-
-            for ($j=0; $j < cardsPerDeal; $j++)
-            {
-               if ($pc + $j >= $details['startingHand'])
-                  break;
-
-               $card = mysql_("SELECT Card FROM rsk_decks WHERE GameID='".$g['GameID']."' AND Position=".$dealt);
-               $g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
-               mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES ('".$g['GameID']."', ".($g['Turn']+1).", ".($p+1).", 'Draw', '".$card."')") or die(mysql_error());
-
-               $dealt++;
-            }
-
-            $p = (++$p) % $details['PlayerCount'];
-         }
-
-         // Status update
-         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='lobby'");
-         mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['GameID']."'");
+         $valstring .= "(".$g['gid'].", $p, '$c')";
       }
 
-      echo '<script type="text/javascript">window.location.href="?"</script>'."\n";
+      mysql_("INSERT INTO rsk_decks (GameID, Position, Card) VALUES $valstring");
+
+
+//      //Deal Starting Hand
+//      $details = mysql_("SELECT PlayerCount, startingHand FROM rsk_games WHERE GID=".$g['gid']." LIMIT 1", MYSQL_ASSOC);
+//
+//      $dealt = 0;
+//      $p = 0;
+//
+//      while ($dealt < $details['startingHand'] * $details['PlayerCount'])
+//      {
+//         $pc = mysql_("SELECT 1 FROM rsk_turns WHERE GameID=".$g['gid']." AND Player=".($p+1)."", true);
+//
+//         for ($j=0; $j < cardsPerDeal; $j++)
+//         {
+//            if ($pc + $j >= $details['startingHand'])
+//               break;
+//
+//            $card = mysql_("SELECT Card FROM rsk_decks WHERE GameID=".$g['gid']." AND Position=".$dealt);
+//            $g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID=".$g['gid']);
+//            mysql_("INSERT INTO rsk_turns (GameID, Turn, Player, Action, Card) VALUES (".$g['gid'].", ".($g['Turn']+1).", ".($p+1).", 'Draw', '".$card."')") or die(mysql_error());
+//
+//            $dealt++;
+//         }
+//
+//         $p = (++$p) % $details['PlayerCount'];
+//      }
+
+      // Status update
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='lobby'");
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
+
+      // Deal Starting Hand
+      $_SESSION['deal'] = $g['startingHand'];
+      echo '<script type="text/javascript">window.location.href="?parse='.$g['gid'].'&back=?deal"</script>'."\n";
       exit;
    }
 
@@ -1543,9 +1685,14 @@ parse:
 
       $gid = mysql_real_escape_string($_REQUEST['parse']);
       if (trim($gid) == '')
-         $gid = mysql_("SELECT GameID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0' LIMIT 1");
+      {
+         $implicit = true;
+         $gid = mysql_("SELECT GameID FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished=0 LIMIT 1");
+      }
+      else
+         $implicit = false;
 
-      if (mysql_("SELECT GID FROM rsk_games WHERE GID='$gid'", true) == 0)
+      if (mysql_("SELECT GID FROM rsk_games WHERE GID=$gid", true) == 0)
       {
          echo "Couldn't find specified game (id: $gid)"."\n";
          echo '<a href="?">Back</a>'."\n";
@@ -1558,7 +1705,7 @@ parse:
 
 
 
-      if (!isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid)
+      if ($implicit || !isset($_SESSION['game']) || $_SESSION['game']['gid']!=$gid)
       {
          $_SESSION['game'] = array();
 
@@ -1613,14 +1760,14 @@ parse:
          if (isset($_REQUEST['turn']))
             $turn = intval($_REQUEST['turn']);
          else
-            $turn = $g['finished']? 0 : mysql_("SELECT GameID FROM rsk_turns WHERE GameID='$gid'", true);
+            $turn = $g['finished']? 0 : mysql_("SELECT GameID FROM rsk_turns WHERE GameID=$gid", true);
 
 
 
 
-      if (!isset($_SESSION['game']['turn']) || $g['turn']!=$turn)
+      if ($implicit || !isset($_SESSION['game']['turn']) || $g['turn']!=$turn)
       {
-         if (isset($_SESSION['game']['turn']))
+         if (!$implicit && isset($_SESSION['game']['turn']))
             $old_turn = $_SESSION['game']['turn'];
 
          $g['turn'] = $turn;
@@ -1654,6 +1801,12 @@ parse:
 
          function act (&$game, $t) //$t /turn/
          {
+            if (!isset($game['players'][$t['Player']]))
+            {
+               var_dump($game['players'], $t['Player']); exit;
+               return false;
+            }
+
             if ($t['Action'] == "Draw")
             {
                $game['players'][$t['Player']]['cards'][] =
@@ -2159,8 +2312,8 @@ ingame:
       echo "\n";
       if ($can_take)
       {
-         echo '   <div class="action">'."\n";
-         echo '      <a href="?takecards">Take</a>'."\n";
+         echo '   <div>'."\n";
+         echo '      <a class="action" href="?takecards">Take</a>'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -2185,8 +2338,8 @@ ingame:
       echo "\n";
       if ($can_draw)
       {
-         echo '   <div class="action">'."\n";
-         echo '      <a href="?draw">Draw</a>'."\n";
+         echo '   <div>'."\n";
+         echo '      <a class="action" href="?draw">Draw</a>'."\n";
          echo '   </div>'."\n";
       }
       echo '</div>'."\n";
@@ -2223,19 +2376,29 @@ ingame:
       echo "\n";
       echo '</body>'."\n";
 
+      // javascript handlers
+
       echo "\n";
       echo '<script type="text/javascript">'."\n";
       echo 'function play (card) {'."\n";
 
       if ($g['onturn'] == $my_pid)
+      {
+         echo '   if (!card) return false;'."\n";
+         echo "\n";
          echo '   window.location.href = "?play="+card;'."\n";
+      }
       else
          echo '   return true;'."\n";
 
-      echo '}'."\n";
+      echo '}'."\n";;
       echo '</script>'."\n";
       echo "\n";
 
+
+      // animation
+      echo '<script type="text/javascript" src="?js&loadingOverhaul"></script>'."\n";
+      echo '<script type="text/javascript" src="test.php?animation"></script>'."\n";
 
       // polling
       $pollfor = 'game:'.$g['gid'];
@@ -2255,7 +2418,7 @@ pregame:
 {
    if (isset($_SESSION['user']) && mysql_("SELECT * FROM rsk_players WHERE Player='".$_SESSION['user']."' AND Finished='0'",true)>0)
    {
-      $g = mysql_("SELECT p.GameID as GameID, g.Name as Name, p.PID as PID, g.PlayerCount as playerCount, g.startingHand as startingHand, g.turnDraw as turnDraw, g.takeDraw as takeDraw, g.emptyDraw as emptyDraw, g.forcedAnswer as forcedAnswer, g.forcedRaise as forcedRaise FROM rsk_players as p, rsk_games as g WHERE p.GameID = g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished='0' LIMIT 1", MYSQL_ASSOC);
+      $g = mysql_("SELECT p.GameID as gid, g.Name as name, g.Host as host, p.PID as my_pid, g.PlayerCount as playerCount, g.startingHand as startingHand, g.turnDraw as turnDraw, g.takeDraw as takeDraw, g.emptyDraw as emptyDraw, g.forcedAnswer as forcedAnswer, g.forcedRaise as forcedRaise FROM rsk_players as p, rsk_games as g WHERE p.GameID = g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished='0' LIMIT 1", MYSQL_ASSOC);
 
 
       echo '<html>'."\n";
@@ -2269,45 +2432,48 @@ pregame:
       echo "\n";
 
       echo '<div class="pre-game main">'."\n";
-      echo '   <div class="name">'.$g['Name'].'</div>'."\n";
+      echo '   <div class="name">'.$g['name'].'</div>'."\n";
       echo "\n";
 
       echo '   <div class="ruleset">'."\n";
       echo '      <div class="header">Rules</div>'."\n";
       echo "\n";
 
-      $presets = array(
-         "exhausting2" => array(
-            "fullname" => "Exhausting 1v1",
-            'playerCount' => 2,
-            'startingHand' => 5,
-            'forcedAnswer' => 1,
-            'forcedRaise' => 0,
-            'turnDraw' => 0,
-            'takeDraw' => 1,
-            'emptyDraw' => 2
-         ),
-         "curious2" => array(
-            "fullname" => "Curious 1v1",
-            'playerCount' => 2,
-            'startingHand' => 2,
-            'forcedAnswer' => 1,
-            'forcedRaise' => 1,
-            'turnDraw' => 0,
-            'takeDraw' => 0,
-            'emptyDraw' => 2
-         ),
-         "casual2" => array(
-            "fullname" => "Casual 1v1",
-            'playerCount' => 2,
-            'startingHand' => 5,
-            'forcedAnswer' => 0,
-            'forcedRaise' => 0,
-            'turnDraw' => 1,
-            'takeDraw' => 0,
-            'emptyDraw' => 0
-         )
-      );
+      presets:
+      {
+         $presets = array(
+            "exhausting2" => array(
+               "fullname" => "Exhausting 1v1",
+               'playerCount' => 2,
+               'startingHand' => 5,
+               'forcedAnswer' => 1,
+               'forcedRaise' => 0,
+               'turnDraw' => 0,
+               'takeDraw' => 1,
+               'emptyDraw' => 2
+            ),
+            "curious2" => array(
+               "fullname" => "Curious 1v1",
+               'playerCount' => 2,
+               'startingHand' => 2,
+               'forcedAnswer' => 1,
+               'forcedRaise' => 1,
+               'turnDraw' => 0,
+               'takeDraw' => 0,
+               'emptyDraw' => 2
+            ),
+            "casual2" => array(
+               "fullname" => "Casual 1v1",
+               'playerCount' => 2,
+               'startingHand' => 5,
+               'forcedAnswer' => 0,
+               'forcedRaise' => 0,
+               'turnDraw' => 1,
+               'takeDraw' => 0,
+               'emptyDraw' => 0
+            )
+         );
+      }
 
       $preset = 'custom';
       foreach ($presets as $name => $rules)
@@ -2324,7 +2490,7 @@ pregame:
          $preset = $name;
       }
 
-      if ($g['PID'] == 1)
+      if ($_SESSION['user'] == $g['host'])
       {
          echo '      <select class="preset" onchange="selectPreset(this.value);">'."\n";
          foreach ($presets as $name => $rules)
@@ -2409,7 +2575,7 @@ pregame:
       echo '   </div>'."\n";
       echo "\n";
 
-      $playersJoined = mysql_("SELECT GameID FROM rsk_players WHERE GameID='".$g['GameID']."' AND Finished='0'", true);
+      $playersJoined = mysql_("SELECT 1 FROM rsk_players WHERE GameID=".$g['gid']." AND Finished=0", true);
 
       echo '   <div class="players">'."\n";
       echo '      <div class="header">Players</div>'."\n";
@@ -2421,7 +2587,7 @@ pregame:
       echo '      <div class="slots">'."\n";
       for ($i=0; $i < $g['playerCount']; $i++)
       {
-         $slot = mysql_("SELECT Player FROM rsk_players WHERE GameID='".$g['GameID']."' AND PID='".($i+1)."'");
+         $slot = mysql_("SELECT Player FROM rsk_players WHERE GameID=".$g['gid']." AND PID=".($i+1)."");
          if ($slot == false)
          {
             echo '         <div class="empty slot">'."\n";
@@ -2433,13 +2599,20 @@ pregame:
             echo '         <div class="slot">'."\n";
             echo '            <span class="position" name="movable">'.($i+1).'</span>'."\n";
             echo '            <span class="player-name">'.$slot.'</span>'."\n";
+
+            if ($_SESSION['user'] == $g['host'] && $slot != $g['host'])
+            {
+               echo '            <a href="?kick='.$slot.'" class="option kick" title="Kick player"> Kick </a>'."\n";
+               echo '            <a href="?promote='.$slot.'" class="option promote" title="Promote to Host"> Promote </a>'."\n";
+            }
+
             echo '         </div>'."\n";
          }
       }
       echo '      </div>'."\n";
       echo "\n";
 
-      if ($g['PID'] == 1)
+      if ($_SESSION['user'] == $g['host'])
       {
          echo '      <script type="text/javascript" src="?js&movables"></script>'."\n";
          echo "\n";
@@ -2449,8 +2622,11 @@ pregame:
       echo "\n";
 
       echo '   <div class="actions">'."\n";
-      echo '      <button onclick="window.location.href=\'?startgame\';">Start Game</button>'."\n";
+
+      if ($_SESSION['user'] == $g['host'])
+         echo '      <button onclick="window.location.href=\'?startgame\';">Start Game</button>'."\n";
       echo '      <button onclick="window.location.href=\'?leavegame\';">Leave Game</button>'."\n";
+
       echo '   </div>'."\n";
       echo "\n";
 
@@ -2460,7 +2636,7 @@ pregame:
       echo '</body>'."\n";
 
       // polling
-      $pollfor = 'game:'.$g['GameID'];
+      $pollfor = 'game:'.$g['gid'];
       echo "\n";
       echo '<script type="text/javascript">'."\n";
       echo '   poll("'.$pollfor.'");'."\n";
