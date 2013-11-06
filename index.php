@@ -250,11 +250,11 @@ EOT;
 .pre-game.main > .name:after {
    content: '';
    display: inline-block;
-   width: 2em;
+   width: 2.5em;
    height: 2.5em;
    background-color: white;
-   border-radius: 1em;
-   margin: -0.5em -2em;
+   border-radius: 2.5em;
+   margin: -0.5em -2.5em;
 }
 .pre-game.main > .name:before {
    float: left;
@@ -504,7 +504,7 @@ a {
    margin-left: 0.25em;
 }
 
-.turn.notice {
+.notice {
    display: block;
    width: 30%;
    min-width: 15em;
@@ -517,6 +517,10 @@ a {
    background-color: rgba(170, 205, 65, 1);
    box-shadow: 0px 0px 5px 5px rgba(170, 205, 65, 1);
    z-index: 2;
+}
+.notice .error {
+   color: #FF3232;
+   font-weight: bold;
 }
 
 .played.hand {
@@ -1262,6 +1266,40 @@ queries:
       echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
       exit;
    }
+   if (isset($_REQUEST['kick']))
+   {
+      $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
+
+      if ($_SESSION['user'] != $g['host'])
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
+
+      $kickee = mysql_real_escape_string($_REQUEST['kick']);
+
+      if ($kickee == $g['host'])
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
+
+      $kicked_pid = mysql_("SELECT PID FROM rsk_players WHERE GameID=".$g['gid']." AND Player='".$kickee."' AND Finished=0 LIMIT 1");
+
+      if ($kicked_pid === false)
+      {
+         echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+         exit;
+      }
+
+      mysql_("DELETE FROM rsk_players WHERE GameID=".$g['gid']." AND Player='".$kickee."' AND Finished=0");
+      mysql_("UPDATE rsk_players SET PID=PID-1 WHERE GameID=".$g['gid']." AND PID>".$kicked_pid);
+
+      mysql_("UPDATE rsk_status SET `Value`=MOD(`Value`+1,  ".status_margin.") WHERE `Key`='game:".$g['gid']."'");
+
+      echo '<script type="text/javascript">window.location.href="?";</script>'."\n";
+      exit;
+   }
    if (isset($_REQUEST['promote'])){
       $g = mysql_("SELECT p.GameID as gid, p.PID as my_pid, g.Host as host FROM rsk_players as p, rsk_games as g WHERE p.GameID=g.GID AND p.Player='".$_SESSION['user']."' AND p.Finished=0 LIMIT 1", MYSQL_ASSOC);
 
@@ -1400,11 +1438,88 @@ queries:
 
 
       // check if its player's turn
+      if ($g['players'][$g['onturn']]['name'] != $_SESSION['user'])
+      {
+         echo '<script type="text/javascript">window.location.href="?error=1"</script>'."\n";
+         exit;
+      }
+
+
       // check if the player actually has this card
+      foreach ($g['players'][$g['onturn']]['cards'] as $c)
+         if ($c['name'] == $card)
+         {
+            $hasCard = true;
+            break;
+         }
+
+      if (!isset($hasCard))
+      {
+         echo '<script type="text/javascript">window.location.href="?error=2"</script>'."\n";
+         exit;
+      }
+
+
       // check if is allowed to play the card
       //    see rule:forcedAnswer
       //    see rule:forcedRaise
 
+      if ($g['rules']['forcedAnswer'] > 0)
+      {
+         // get the demanded die
+         $dc  = reset($g['cards']['played']);
+         $dcd = substr($dc['name'], -1);
+
+         if (substr($card, -1) != $dcd)
+         {
+            // check if there is a card of that die in the player's hand
+            foreach ($g['players'][$g['onturn']]['cards'] as $c)
+               if ($c['name'] != $card && substr($c['name'], -1) == $dcd)
+               {
+                  echo '<script type="text/javascript">window.location.href="?error=3"</script>'."\n";
+                  exit;
+               }
+         }
+         else
+         {
+            if ($g['rules']['forcedRaise'] > 0)
+            {
+               // get lead
+               unset($lead);
+               foreach ($g['cards']['played'] as $c)
+               {
+                  if (!isset($lead))
+                  {
+                     $lead = $c;
+                     continue;
+                  }
+
+                  if (substr($c['name'], -1) != substr($lead['name'], -1))
+                     continue;
+
+
+                  if ($lead['power'] > $c['power'])
+                     continue;
+
+                  $lead = $c;
+               }
+
+               // if $card -> power  <  $lead -> power
+               $cp = intval(mysql_("SELECT Power FROM rsk_cards WHERE Card='$card' LIMIT 1"));
+               if ($cp < $lead['power'])
+               {
+                  // if has more powerful card than $lead (and that is not $card), die
+                  foreach ($g['players'][$g['onturn']]['cards'] as $c)
+                     if ($c['name'] != $card && substr($c['name'], -1) == $dcd && $c['power'] > $lead['power'])
+                     {
+                        echo '<script type="text/javascript">window.location.href="?error=4"</script>'."\n";
+                        exit;
+                     }
+               }
+
+            }
+         }
+      }
 
 
       // if the action is hand-initializing
@@ -1469,7 +1584,13 @@ queries:
       $g = &$_SESSION['game'];
 
       // check if it is player's turn
-      // check if the player won the last hand
+      // -obsolete- check if the player won the last hand
+      if ($g['players'][$g['onturn']]['name'] != $_SESSION['user'])
+      {
+         echo '<script type="text/javascript">window.location.href="?error=1"</script>'."\n";
+         exit;
+      }
+
 
       // take set cards
       //$g['Turn'] = mysql_("SELECT MAX(Turn) FROM rsk_turns WHERE GameID='".$g['GameID']."'");
@@ -1900,6 +2021,7 @@ parse:
    }
 }
 
+
 observe:
 {
    if (isset($_REQUEST['observe']))
@@ -2254,8 +2376,24 @@ ingame:
 
       // Notice Section
 
-      echo '<div class="turn notice">'."\n";
+      echo '<div class="notice">'."\n";
+
+      echo '   <div class="turn">'."\n";
       echo '   '.($g['onturn'] == $my_pid ? "Your turn" : $g['players'][$g['onturn']]['name']."'s turn")."\n";
+      echo '   </div>'."\n";
+
+      if (isset($_REQUEST['error']))
+      {
+         $e = $_REQUEST['error'];
+         echo '   <div class="error">'."\n";
+
+         if ($e == 1) echo "It is not your turn!";
+         if ($e == 2) echo "You have no such card!";
+         if ($e == 3) echo "You must answer with the same suit!";
+         if ($e == 4) echo "You must answer with a stronger card!";
+
+         echo '   </div>'."\n";
+      }
       echo '</div>'."\n";
 
 
@@ -2727,11 +2865,11 @@ lobby:
          echo '            <span class="maximum">'.$game['PlayerCount'].'</a>'."\n";
          echo '         </div>'."\n";
          echo '         <div class="rules">'."\n";
-         echo '            <span class="starting-hand">'.$game['startingHand'].'</span>'."\n";
-         echo '            <span class="empty-draw">'.$game['emptyDraw'].'</span>'."\n";
-         echo '            <span class="forced-answer">'.($game['forcedAnswer']==1? "yes" : "no").'</span>'."\n";
-         echo '            <span class="forced-raise">'.($game['forcedRaise']==1? "yes" : "no").'</span>'."\n";
-         echo '            <span class="turn-draw">'.($game['turnDraw']==1? "yes" : "no").'</span>'."\n";
+         echo '            <span class="starting-hand" title="Starting hand">'   .$game['startingHand'].'</span>'."\n";
+         echo '            <span class="empty-draw"    title="Draw when empty">' .$game['emptyDraw'].'</span>'."\n";
+         echo '            <span class="forced-answer" title="Forced to answer">'.($game['forcedAnswer']==1? "yes" : "no").'</span>'."\n";
+         echo '            <span class="forced-raise"  title="Forced to raise">' .($game['forcedRaise']==1? "yes" : "no").'</span>'."\n";
+         echo '            <span class="turn-draw"     title="Draw each turn">'  .($game['turnDraw']==1? "yes" : "no").'</span>'."\n";
          echo '         </div>'."\n";
          echo '      </div>'."\n";
       }
@@ -2753,11 +2891,11 @@ lobby:
          echo '            <span class="maximum">'.$game['PlayerCount'].'</a>'."\n";
          echo '         </div>'."\n";
          echo '         <div class="rules">'."\n";
-         echo '            <span class="starting-hand">'.$game['startingHand'].'</span>'."\n";
-         echo '            <span class="empty-draw">'.$game['emptyDraw'].'</span>'."\n";
-         echo '            <span class="forced-answer">'.($game['forcedAnswer']==1? "yes" : "no").'</span>'."\n";
-         echo '            <span class="forced-raise">'.($game['forcedRaise']==1? "yes" : "no").'</span>'."\n";
-         echo '            <span class="turn-draw">'.($game['turnDraw']==1? "yes" : "no").'</span>'."\n";
+         echo '            <span class="starting-hand" title="Starting hand">'   .$game['startingHand'].'</span>'."\n";
+         echo '            <span class="empty-draw"    title="Draw when empty">' .$game['emptyDraw'].'</span>'."\n";
+         echo '            <span class="forced-answer" title="Forced to answer">'.($game['forcedAnswer']==1? "yes" : "no").'</span>'."\n";
+         echo '            <span class="forced-raise"  title="Forced to raise">' .($game['forcedRaise']==1? "yes" : "no").'</span>'."\n";
+         echo '            <span class="turn-draw"     title="Draw each turn">'  .($game['turnDraw']==1? "yes" : "no").'</span>'."\n";
          echo '         </div>'."\n";
          echo '      </div>'."\n";
       }
